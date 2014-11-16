@@ -55,10 +55,17 @@ function parse(rule, hardcoded, macros) {
     var s = '';
     if (top === TOPLEVEL) s += 'if (!(true';
 
-    if (peek('[')) s += ' && checkToken(symw()' + parseWhiteToken();
-    else if (peek('{')) s += ' && checkTokenBlack(symb()' + parseBlackToken();
-    else if (peek('(')) s += ' && checkGroup(symg()' + parseGroup(insideToken);
-    else return false;
+    if (peek('[')) {
+      if (insideToken) reject('Trying to parse another token while inside a token');
+      s += ' && checkToken(symw()' + parseWhiteToken();
+    } else if (peek('{')) {
+      if (insideToken) reject('Trying to parse another token while inside a token');
+      s += ' && checkTokenBlack(symb()' + parseBlackToken();
+    } else if (peek('(')) {
+      s += ' && checkGroup(symg()' + parseGroup(insideToken);
+    } else {
+      return false;
+    }
 
 //    parseQuantifiers();
     s += parseAssignments();
@@ -88,10 +95,17 @@ function parse(rule, hardcoded, macros) {
 
     while (true) {
       if (peek(')')) break;
-      else if (peek('[')) s += parseAtomMaybe(NOT_TOPLEVEL, insideToken);
-      else if (peek('{')) s += parseAtomMaybe(NOT_TOPLEVEL, insideToken);
-      else if (peek('(')) s += parseAtomMaybe(NOT_TOPLEVEL, insideToken);
-      else s += parseMatchConditions(insideToken);
+      else if (peek('[')) {
+        if (insideToken) reject('Trying to parse another token while inside a token');
+        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken);
+      } else if (peek('{')) {
+        if (insideToken) reject('Trying to parse another token while inside a token');
+        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken);
+      } else if (peek('(')) {
+        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken);
+      } else {
+        s += parseMatchConditions(insideToken);
+      }
     }
 
     assert(')');
@@ -110,8 +124,14 @@ function parse(rule, hardcoded, macros) {
   }
 
   function parseMatchParticle(insideToken) {
-    if (peek('`')) return parseLiteral();
-    if (peek('*')) return parseStar();
+    if (peek('`')) {
+      if (!insideToken) reject('Trying to parse a literal while not inside a tag');
+      return parseLiteral();
+    }
+    if (peek('*')) {
+      if (!insideToken) reject('Unit test: inconsistent; is this star a quantifier or condition?');
+      return parseStarCondition();
+    }
     if (peek('(')) return parseAtomMaybe(NOT_TOPLEVEL, insideToken);
     var peeked = peek();
     if ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked === '$' || peeked === '_')) return parseSymbol(insideToken);
@@ -167,7 +187,7 @@ function parse(rule, hardcoded, macros) {
 
   }
 
-  function parseStar() {
+  function parseStarCondition() {
     assert('*');
 
     return ' && !!token()';
@@ -185,7 +205,7 @@ function parse(rule, hardcoded, macros) {
       else break;
     }
 
-    if (hardcoded[s]) return ' && ' + hardcoded[s];
+    if (hardcoded[s]) return ' && ' + hardcoded[s]; // TOFIX: detect token state and report?
     if (macros[s]) return injectMacro(macros[s], start, pos, insideToken);
 
     reject('Unknown constant: ['+s+']');
@@ -238,14 +258,13 @@ function parse(rule, hardcoded, macros) {
   function injectMacro(macro, from, to, insideToken) {
     // remove lastAtomStart...pos and replace it with macro
     // then reset pos and parse atom again
-
     var s = '';
 
     rule = rule.slice(0, from) + macro + rule.slice(to);
     pos = from;
 
     if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(NOT_TOPLEVEL, insideToken);
-    return s + parseMatchConditions();
+    return s + parseMatchConditions(insideToken);
   }
 
   var code = parseRule();
