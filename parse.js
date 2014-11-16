@@ -62,7 +62,8 @@ function parse(rule, hardcoded, macros) {
       if (insideToken) reject('Trying to parse another token while inside a token');
       s += ' && checkTokenBlack(symb()' + parseBlackToken();
     } else if (peek('(')) {
-      s += ' && checkGroup(symg()' + parseGroup(insideToken);
+      if (insideToken) s += ' && checkTokenGroup(symgt()' + parseGroup(INSIDE_TOKEN);
+      else s += ' && checkConditionGroup(symgc()' + parseGroup(OUTSIDE_TOKEN);
     } else {
       return false;
     }

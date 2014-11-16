@@ -38,7 +38,9 @@ function compile(ruleCode, tokens) {
   var ruleFunction = eval('('+ruleCode+');'); // direct eval woop
   var seenZero = false; // have we seen `=0` yet? if not, puts start at arg 0 when a rule matches
   var nonIntKeys = false; // have we seen args that are not ints?
-  var args = null; // object to send to handler
+
+  var argStack = []; // args set while parsing, in array so we can drop them for trackbacks in ORs. the stack is filled in pairs (<arg name:index>)
+  var argPointers = []; // marks starts of current conditional group on argStack
 
   function value(str) {
     var s = tokens[index] && tokens[index].value;
@@ -71,24 +73,6 @@ function compile(ruleCode, tokens) {
       var t = tokens[++index];
     } while (t && (t.type === WHITE || t.type === SOL));
   }
-//  function nextAfter(token) {
-//    index = token.white + 1;
-//
-//    return true; // just for transformed rules
-//  }
-  function setArg(name, index) {
-    if (!name) return;
-
-    args[name] = token(index);
-
-    var n = parseInt(name, 10);
-    if (String(n) === name) {
-      args.length = Math.max(n+1, args.length);
-      if (n === 0) seenZero = true;
-    } else {
-      nonIntKeys = true;
-    }
-  }
   function symw() {
     symbolStarts.push(index);
     return true;
@@ -97,7 +81,7 @@ function compile(ruleCode, tokens) {
     var s = symbolStarts.pop();
     if (matches) {
       next();
-      updateArgs(s, startKey, stopKey);
+      queueArgs(s, startKey, stopKey);
     }
     return matches;
   }
@@ -111,41 +95,97 @@ function compile(ruleCode, tokens) {
     var s = symbolStarts.pop();
     if (matches) {
       next();
-      updateArgs(s, startKey, stopKey);
+      queueArgs(s, startKey, stopKey);
     }
     return matches;
   }
 
-  function symg() {
+  function symgt() {
+    argPointers.push(argStack.length);
     symbolStarts.push(index);
     return true;
   }
-  function checkGroup(matches, startKey, stopKey) {
-//    console.log('checkgrtoup', index, matches, startKey, stopKey, symbolStarts.slice(0), token(symbolStarts[0]).value)
+  function checkTokenGroup(matches, startKey, stopKey) {
     var s = symbolStarts.pop();
-    if (matches) updateArgs(s, startKey, stopKey);
+    var argPointer = argPointers.pop();
+    if (argStack.length < argPointer) console.warn('assertion fail: arg stack is smaller than at start of group');
+    if (matches) {
+      queueArgs(s, startKey, stopKey);
+    } else {
+      argStack.length = argPointer;
+    }
     return matches;
   }
 
-  function updateArgs(startIndex, startKey, stopKey) {
-    setArg(startKey, startIndex);
-    setArg(stopKey, index-1);
+  function symgc() {
+    symbolStarts.push(index);
+    return true;
+  }
+  function checkConditionGroup(matches, startKey, stopKey) {
+    var s = symbolStarts.pop();
+    if (matches) queueArgs(s, startKey, stopKey);
+    return matches;
+  }
+
+  function queueArgs(startIndex, startKey, stopKey) {
+    if (startKey) argStack.push(startKey, startIndex);
+    if (stopKey) argStack.push(stopKey, index-1);
+  }
+
+  function flushArgs() {
+    // there was a match. all relevant args are in the queue. flush it (in pairs!)
+    if (!argStack.length) return null;
+
+    var args = {length:0}; // fake array, may be passed on as is if there are any non-int keys. // TOFIX: improve perf here. we can do better than this :)
+
+    if (argStack.length % 2) throw new Error('Assertion error: argStack has an uneven number of arguments');
+    while (argStack.length) {
+      var value = argStack.pop();
+      var key = argStack.pop();
+      setArg(args, key, value);
+    }
+
+    return args;
+  }
+  function setArg(args, name, index) {
+    var n = parseInt(name, 10);
+    if (String(n) === name) {
+      args.length = Math.max(n+1, args.length);
+      if (n === 0) seenZero = true;
+    } else if (!nonIntKeys) {
+      nonIntKeys = true;
+      delete args.length; // allows for a user to call its arg `length` (I suppose not a rare case)
+    }
+
+    // set afterwards because of the `length` case
+    args[name] = token(index);
   }
 
   return function check(start, handler) {
     index = start;
     from = start;
     seenZero = false;
-    args = {length:0}; // fake array, may be passed on as is if there are any non-int keys. // TOFIX: improve perf here. we can do better than this :)
     nonIntKeys = false;
 
-    if (ruleFunction()) {
-      if (!seenZero) {
+    if (argStack.length !== 0) throw new Error('Expect argStack to be empty before rule check ['+argStack+'] ['+argPointers+']');
+    if (argPointers.length !== 0) throw new Error('Expect argPointers to be empty before rule check ['+argStack+'] ['+argPointers+']');
+
+    var matched = ruleFunction();
+
+    if (matched) {
+      // apply all args currently in the stack
+      var args = flushArgs(); // may return null
+
+      if (!seenZero && args) {
         args[0] = token(start);
         args.length = Math.max(args.length, 1);
       }
-      if (nonIntKeys) handler(args);
+
+      if (!args) handler(token(start));
+      else if (nonIntKeys) handler(args);
       else handler.apply(undefined, args);
+    } else {
+      argStack.length = 0;
     }
   }
 }
