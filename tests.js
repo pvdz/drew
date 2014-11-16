@@ -152,8 +152,10 @@ var tests = module.exports = [
     'OR between tokens'
   ],
 
-
 //  [
-//    '([foo][bar])|([doo][dar])'
+//    '{`function` & KEYWORD}=0 {IDENTIFIER} {`(`} ({IDENTIFIER} ({COMMA} {IDENTIFIER})*)?=1,2 {`)`}{`{`}=3',
+//    '',
+//    '',
+//    'function identifier and arg header',
 //  ]
 ];
