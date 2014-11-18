@@ -273,44 +273,38 @@ function parse(rule, hardcoded, macros) {
     var assignmentString = '';
 
     if (peek('=')) {
-      // = number | identifier, no escapes
-      var leftName = '';
       assert('='); // take =, skip whitespace
-      while (true) {
-        var peeked = rule[pos];
-        if ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
-          leftName += rule[pos++];
-        }
-        else break;
-      }
-      // skip whitespace after name...
-      --pos;
-      consume();
 
-      if (!leftName) reject('Missing valid var name after equal sign');
-      assignmentString += ', \'' + leftName + '\'';
+      if (peek(',')) { // [foo]=,1
+        s += ', undefined';
+      } else {
+        s += parseAssignmentKey();
+      }
 
       if (peek() === ',') {
         assert(',');
-
-        var rightName = '';
-        while (true) {
-          var peeked = rule[pos];
-          if (peeked && (peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
-            rightName += rule[pos++];
-          }
-          else break;
-        }
-        // skip whitespace after name...
-        --pos;
-        consume();
-
-        if (!rightName) reject('Missing valid second var name after equal sign');
-        assignmentString += ', \'' + rightName + '\'';
+        s += parseAssignmentKey();
       }
     }
 
     return assignmentString;
+  }
+  function parseAssignmentKey() {
+    var name = '';
+    while (true) {
+      var peeked = rule[pos];
+      if (peeked && (peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
+        name += rule[pos++];
+      }
+      else break;
+    }
+    // skip whitespace after name...
+    --pos;
+    consume();
+
+    if (!name) reject('Missing valid var name after equal sign');
+
+    return ', \'' + name + '\'';
   }
 
   function injectMacro(macro, from, to, insideToken, tokenGroupIndex) {
