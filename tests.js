@@ -151,6 +151,30 @@ var tests = module.exports = [
     'var@x@=@5;',
     'OR between tokens'
   ],
+  [
+    '([SPACE]|[TAB])|[COMMA]', // imagine SPACE|TAB being a macro
+    '[1, 2 , 3\t, 4\n,5 \t,6\t ,7];',
+    '[1@@2@@@3@@@4\n@5@@@6@@@7];',
+    'OR between tokens and conditions'
+  ],
+  [
+    '([SPACE][SPACE][SPACE][SPACE]|[TAB])=0,1',
+    'var    b;',
+    'var@  $b;',
+    'test range params for grouped conditionals of different length; long'
+  ],
+  [
+    '([SPACE][SPACE][SPACE][SPACE]|[TAB][TAB])=0,1',
+    'var\t\tb;',
+    'var@$b;',
+    'test range params for grouped conditionals of different length; short'
+  ],
+//  [
+//    '([SPACE]|[TAB])=0|([COMMA]|[NUMBER])=1',
+//    'var x\t= 5, y;',
+//    'var@x@=@$@ y;',
+//    'OR between tokens'
+//  ],
 
 //  [
 //    '{`function` & KEYWORD}=0 {IDENTIFIER} {`(`} ({IDENTIFIER} ({COMMA} {IDENTIFIER})*)?=1,2 {`)`}{`{`}=3',

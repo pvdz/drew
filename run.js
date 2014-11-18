@@ -103,7 +103,6 @@ function compile(ruleCode, tokens) {
   function symgt() {
     argPointers.push(argStack.length);
     symbolStarts.push(index);
-    return true;
   }
   function checkTokenGroup(matches, startKey, stopKey) {
     var s = symbolStarts.pop();
