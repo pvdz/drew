@@ -103,7 +103,7 @@ function parse(rule, hardcoded, macros) {
       if (insideToken) {
         s += ' && checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
       } else {
-        if (!insideToken && !noCurlies) s += '{\n';
+        s += '{\n';
         s += '// start group '+currentAtomIndex+'\n';
         s += 'var group'+currentAtomIndex+' = false;\n';
         s += 'symgt();\n';
@@ -111,7 +111,7 @@ function parse(rule, hardcoded, macros) {
         s += 'checkTokenGroup(group' + currentAtomIndex + parseAssignments() + ');\n';
         s += 'group'+tokenGroupNumber+' = group'+currentAtomIndex+'\n';
         s += '// end group '+currentAtomIndex+'\n';
-        if (!insideToken && !noCurlies) s += '}\n';
+        s += '}\n';
       }
     } else {
       return false;
