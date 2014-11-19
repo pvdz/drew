@@ -85,42 +85,55 @@ function parse(rule, hardcoded, macros) {
     lastAtomStart = pos;
     var currentAtomIndex = counter++;
 
-    var s = '';
+    var beforeQuantifier = '';
+    var afterQuantifier = '';
+    var result;
 
     if (peek('[')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
-      if (noCurlies) s += '{\n';
-      s += '// white token '+currentAtomIndex+':'+(tokenCounter++)+'\n';
-      s += 'group'+tokenGroupNumber+' = checkToken(symw()' + parseWhiteToken() + parseAssignments() + ');\n';
-      if (noCurlies) s += '}\n';
+      if (noCurlies) beforeQuantifier += '{\n';
+      beforeQuantifier += '// white token '+currentAtomIndex+':'+(tokenCounter++)+'\n';
+      beforeQuantifier += 'group'+tokenGroupNumber+' = checkToken(symw()' + parseWhiteToken();
+
+      afterQuantifier += ');\n';
+      if (noCurlies) afterQuantifier += '}\n';
+
+      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
     } else if (peek('{')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
-      if (noCurlies) s += '{\n';
-      s += '// black token '+currentAtomIndex+':'+(tokenCounter++)+'\n';
-      s += 'group'+tokenGroupNumber+' = checkTokenBlack(symb()' + parseBlackToken() + parseAssignments() + ');\n';
-      if (noCurlies) s += '}\n';
+      if (noCurlies) beforeQuantifier += '{\n';
+      beforeQuantifier += '// black token '+currentAtomIndex+':'+(tokenCounter++)+'\n';
+      beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenBlack(symb()' + parseBlackToken();
+
+      afterQuantifier += ');\n';
+      if (noCurlies) afterQuantifier += '}\n';
+
+      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
     } else if (peek('(')) {
       if (insideToken) {
-        s += ' && checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
+        beforeQuantifier += ' && checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
+
+        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
       } else {
-        s += '{\n';
-        s += '// start group '+currentAtomIndex+'\n';
-        s += 'var group'+currentAtomIndex+' = false;\n';
-        s += 'symgt();\n';
-        s += parseGroup(OUTSIDE_TOKEN, currentAtomIndex);
-        s += 'checkTokenGroup(group' + currentAtomIndex + parseAssignments() + ');\n';
-        s += 'group'+tokenGroupNumber+' = group'+currentAtomIndex+'\n';
-        s += '// end group '+currentAtomIndex+'\n';
-        s += '}\n';
+        beforeQuantifier += '{\n';
+        beforeQuantifier += '// start group '+currentAtomIndex+'\n';
+        beforeQuantifier += 'var group'+currentAtomIndex+' = false;\n';
+        beforeQuantifier += 'symgt();\n';
+        beforeQuantifier += parseGroup(OUTSIDE_TOKEN, currentAtomIndex);
+        beforeQuantifier += 'checkTokenGroup(group' + currentAtomIndex;
+
+        afterQuantifier += ');\n';
+        afterQuantifier += 'group'+tokenGroupNumber+' = group'+currentAtomIndex+'\n';
+        afterQuantifier += '// end group '+currentAtomIndex+'\n';
+        afterQuantifier += '}\n';
+
+        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
       }
     } else {
       return false;
     }
 
-    s = parseQuantifiers(s, tokenGroupNumber, currentAtomIndex);
-
-
-    return s;
+    return result;
   }
 
   function parseWhiteToken() {
@@ -269,7 +282,8 @@ function parse(rule, hardcoded, macros) {
     reject('Unknown constant: ['+s+']');
   }
 
-  function parseAssignments() {
+  function parseAssignments(forced) {
+    // forced -> must always return two params, use undefined if a param is not requested
     var assignmentString = '';
     if (peek('=')) {
       assert('='); // take =, skip whitespace
@@ -283,7 +297,11 @@ function parse(rule, hardcoded, macros) {
       if (peek() === ',') {
         assert(',');
         assignmentString += parseAssignmentKey();
+      } else if (forced) {
+        assignmentString += ', undefined';
       }
+    } else if (forced) {
+      assignmentString += ', undefined, undefined';
     }
 
     return assignmentString;
@@ -318,7 +336,7 @@ function parse(rule, hardcoded, macros) {
     return s + parseMatchConditions(insideToken, tokenGroupIndex);
   }
 
-  function parseQuantifiers(s, tokenGroupNumber, currentAtomIndex) {
+  function parseQuantifiers(beforeAssignments, afterAssignments, tokenGroupNumber, currentAtomIndex) {
     // [foo] 1
     // [foo] 1...
     // [foo] 1..2
@@ -338,10 +356,11 @@ function parse(rule, hardcoded, macros) {
       // 0:0 is good.
       consume();
     } else if (peeked === undefined) {
-      return s; // EOF
+      // EOF
+      return beforeAssignments + parseAssignments() + afterAssignments;
     } else if (peeked < '0' || peeked > '9') {
-      // no quantifier. dont modify string.
-      return s;
+      // no quantifier. dont wrap string.
+      return beforeAssignments + parseAssignments() + afterAssignments;
     } else {
       min = parseNumbers();
 
@@ -362,14 +381,16 @@ function parse(rule, hardcoded, macros) {
       }
     }
 
-    s =
+    var FORCE_PARAMFILL = true;
+
+    var result =
       '{\n' +
         'var loopProtection'+currentAtomIndex+' = 10000;\n' +
         'var min'+currentAtomIndex+' = '+min+';\n' +
         'var max'+currentAtomIndex+' = '+max+';\n' +
         'var count'+currentAtomIndex+' = 0;\n' +
         'do {\n' +
-          s +
+          beforeAssignments + parseAssignments(FORCE_PARAMFILL) + ', count'+currentAtomIndex + afterAssignments +
         '} while(group'+tokenGroupNumber+' && --loopProtection'+currentAtomIndex+' > 0 && (min'+currentAtomIndex+' < ++count'+currentAtomIndex+' || !max'+currentAtomIndex+' || count'+currentAtomIndex+' < max'+currentAtomIndex+'));\n' +
         'if (loopProtection'+currentAtomIndex+' <= 0) throw "Loop protection!";\n' +
         // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
@@ -377,7 +398,7 @@ function parse(rule, hardcoded, macros) {
       '}\n' +
       '';
 
-    return s;
+    return result;
   }
   function parseNumbers() {
     var s = '';

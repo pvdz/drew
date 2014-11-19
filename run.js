@@ -83,11 +83,11 @@ function compile(ruleCode, tokens) {
     symbolStarts.push(index);
     return true;
   }
-  function checkToken(matches, startKey, stopKey) {
+  function checkToken(matches, startKey, stopKey, loopCount) {
     var s = symbolStarts.pop();
     if (matches) {
       next();
-      queueArgs(s, startKey, stopKey);
+      queueArgs(s, startKey, stopKey, loopCount);
     }
     return matches;
   }
@@ -97,11 +97,11 @@ function compile(ruleCode, tokens) {
     symbolStarts.push(index);
     return true;
   }
-  function checkTokenBlack(matches, startKey, stopKey) {
+  function checkTokenBlack(matches, startKey, stopKey, loopCount) {
     var s = symbolStarts.pop();
     if (matches) {
       next();
-      queueArgs(s, startKey, stopKey);
+      queueArgs(s, startKey, stopKey, loopCount);
     }
     return matches;
   }
@@ -110,12 +110,12 @@ function compile(ruleCode, tokens) {
     argPointers.push(argStack.length);
     symbolStarts.push(index);
   }
-  function checkTokenGroup(matches, startKey, stopKey) {
+  function checkTokenGroup(matches, startKey, stopKey, loopCount) {
     var s = symbolStarts.pop();
     var argPointer = argPointers.pop();
     if (argStack.length < argPointer) console.warn('assertion fail: arg stack is smaller than at start of group');
     if (matches) {
-      queueArgs(s, startKey, stopKey);
+      queueArgs(s, startKey, stopKey, loopCount);
     } else {
       argStack.length = argPointer;
     }
@@ -132,8 +132,9 @@ function compile(ruleCode, tokens) {
     return matches;
   }
 
-  function queueArgs(startIndex, startKey, stopKey) {
-    if (startKey) argStack.push(startKey, startIndex);
+  function queueArgs(startIndex, startKey, stopKey, loopCount) {
+    // if loopCount is given, this is quantified and we must not update start more than once (starts with 0)
+    if (startKey && !loopCount) argStack.push(startKey, startIndex);
     if (stopKey) argStack.push(stopKey, index-1);
   }
 
@@ -145,8 +146,9 @@ function compile(ruleCode, tokens) {
 
     if (argStack.length % 2) throw new Error('Assertion error: argStack has an uneven number of arguments');
     while (argStack.length) {
-      var value = argStack.pop();
-      var key = argStack.pop();
+      // go left to right to update quantified values (-> shift vs pop)
+      var key = argStack.shift();
+      var value = argStack.shift();
       setArg(args, key, value);
     }
 
