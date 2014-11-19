@@ -20,9 +20,49 @@ var macros = module.exports = {
 
   COMMA: '`,`',
   PLUS: '`+`',
+  IS: '`=`',
+  SEMI: '`;`',
+  CURLY_OPEN: '`{`',
+  CURLY_CLOSE: '`}`',
+  PAREN_OPEN: '`(`',
+  PAREN_CLOSE: '`)`',
+  SQUARE_OPEN: '`[`',
+  SQUARE_CLOSE: '`]`',
 
+  // skip from current curly to after the next (group because param assignments are a problem otherwise)
+  CURLY_PAIR: '(CURLY_OPEN & JUMP_TO_RHC)',
+  SQUARE_PAIR: '(SQUARE_OPEN & JUMP_TO_RHS)',
+  PAREN_PAIR: '(PAREN_OPEN & JUMP_TO_RHP)',
+
+  BREAK: '`break`',
+  CASE: '`case`',
+  CATCH: '`catch`',
+  CONTINUE: '`continue`',
+  DEBUGGER: '`debugger`',
+  DEFAULT: '`default`',
+  DO: '`do`',
+  FINALLY: '`finally`',
+  FOR: '`for`',
+  FUNCTION: '`function`',
+  IF: '`if`',
+  RETURN: '`return`',
+  SWITCH: '`switch`',
+  TRY: '`try`',
+  THROW: '`throw`',
   VAR: '`var`',
+  WHILE: '`while`',
+  WITH: '`with`',
+  STATEMENT_KEYWORD: 'BREAK | CASE | CONTINUE | DEBUGGER|  DEFAULT | DO | FOR | FUNCTION | IF | RETURN | SWITCH | TRY | THROW | VAR | WHILE | WITH',
 
 
-  ADDITION: '{NUMBER}{PLUS}{NUMBER}'
+  ADDITION: '{NUMBER}{PLUS}{NUMBER}',
+
+  FUNC_NAMED: '{FUNCTION}{IDENTIFIER}(FUNCTION_REST)',
+  FUNC_ANON: '{FUNCTION}(FUNCTION_REST)',
+  FUNC_OPT: '{FUNCTION}{IDENTIFIER}?(FUNCTION_REST)',
+  FUNCTION_REST: '{PARENS}{CURLIES}',
+
+
+  STATEMENT_HEADER: '{PARENS}',
+  STATEMENT: '{STATEMENT_KEYWORD}(STATEMENT_HEADER)?'
 };
