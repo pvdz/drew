@@ -26,7 +26,7 @@ for (var i=0; i<tests.length; ++i) {
     console.error('failed rule parse '+i);
     console.log('- rule: '+rule);
     console.log('- input: '+input.replace(/\n/g, '\u23CE'));
-    console.log('- expect:'+expect.replace(/\n/g, '\u23CE'));
+    console.log('- expect: '+expect.replace(/\n/g, '\u23CE'));
 //    console.log(funcCode);
 //    console.log(funcCode.replace(/true && /g, ''));
     console.error(e.stack);
@@ -79,9 +79,9 @@ for (var i=0; i<tests.length; ++i) {
 
   if (expect !== output || targetTestIndex >= 0) {
     console.log('- rule: '+rule);
-    console.log('- input: '+input.replace(/\n/g, '\u23CE'));
-    console.log('- expect:'+expect.replace(/\n/g, '\u23CE'));
-    console.log('- output:'+output.replace(/\n/g, '\u23CE'));
+    console.log('- input: ', [input.replace(/\n/g, '\u23CE')]);
+    console.log('- expect:', [expect.replace(/\n/g, '\u23CE')]);
+    console.log('- output:', [output.replace(/\n/g, '\u23CE')]);
     console.log(funcCode);
     console.log(funcCode.replace(/true && /g, ''));
     console.log('');

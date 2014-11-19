@@ -11,14 +11,14 @@ var tests = module.exports = [
     'var@a@=@20;'
   ],
   [
-    '[SOL][`a`]',
+    '[SOL & `a`]',
     'a;\nb;',
     '@;\nb;'
   ],
   [
-    '[SOL][`b`]',
+    '[SOL & `b`]',
     'a;\nb;',
-    'a;@b;'
+    'a;\n@;'
   ],
   [
     '[SPACE][COMMA][SPACE]',
@@ -132,9 +132,27 @@ var tests = module.exports = [
   ],
 
   [
-    '[SPACE]*[NUMBER]=0',
+    '[SPACE]*',
     '   1;',
-    '   @;',
+    '@@@@@',
+    'any, matching all'
+  ],
+  [
+    '[SPACE]*[`1`]',
+    '   1;',
+    '@@@@;',
+    'any (matches any space and 1, triggers multiple times)'
+  ],
+  [
+    '[`=`][SPACE]*[NUMBER]=0,1',
+    'x =   1;',
+    'x =   $;',
+    'quantifier: any'
+  ],
+  [
+    '[`=`][SPACE]*[NUMBER]=,1',
+    'x =   1;',
+    'x @   $;',
     'quantifier: any'
   ],
 

@@ -117,7 +117,7 @@ function parse(rule, hardcoded, macros) {
       return false;
     }
 
-//    parseQuantifiers();
+    s = parseQuantifiers(s, tokenGroupNumber, currentAtomIndex);
 
 
     return s;
@@ -271,19 +271,18 @@ function parse(rule, hardcoded, macros) {
 
   function parseAssignments() {
     var assignmentString = '';
-
     if (peek('=')) {
       assert('='); // take =, skip whitespace
 
       if (peek(',')) { // [foo]=,1
-        s += ', undefined';
+        assignmentString += ', undefined';
       } else {
-        s += parseAssignmentKey();
+        assignmentString += parseAssignmentKey();
       }
 
       if (peek() === ',') {
         assert(',');
-        s += parseAssignmentKey();
+        assignmentString += parseAssignmentKey();
       }
     }
 
@@ -317,6 +316,79 @@ function parse(rule, hardcoded, macros) {
 
     if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex);
     return s + parseMatchConditions(insideToken, tokenGroupIndex);
+  }
+
+  function parseQuantifiers(s, tokenGroupNumber, currentAtomIndex) {
+    // [foo] 1
+    // [foo] 1...
+    // [foo] 1..2
+
+    var min = 0;
+    var max = 0; // 0=infinite upper bound, -1=ignore upper bound (min is absolute bound)
+
+    var peeked = peek();
+
+    if (peeked === '+') {
+      min = 1;
+      consume();
+    } else if (peeked === '?') {
+      max = 1;
+      consume();
+    } else if (peeked === '*') {
+      // 0:0 is good.
+      consume();
+    } else if (peeked === undefined) {
+      return s; // EOF
+    } else if (peeked < '0' || peeked > '9') {
+      // no quantifier. dont modify string.
+      return s;
+    } else {
+      min = parseNumbers();
+
+      if (!peek('.')) {
+        max = min;
+      } else {
+        // note: this allows the dots to be spaced, but who cares. this doesn't allow ambiguity and I couldnt care less.
+        assert('.');
+        assert('.');
+        if (peek('.')) {
+          assert('.');
+          max = 0;
+        } else if (peeked < '0' || peeked > '9') {
+          reject('expecting number after double dot');
+        } else {
+          max = parseNumbers();
+        }
+      }
+    }
+
+    s =
+      '{\n' +
+        'var loopProtection'+currentAtomIndex+' = 10000;\n' +
+        'var min'+currentAtomIndex+' = '+min+';\n' +
+        'var max'+currentAtomIndex+' = '+max+';\n' +
+        'var count'+currentAtomIndex+' = 0;\n' +
+        'do {\n' +
+          s +
+        '} while(group'+tokenGroupNumber+' && --loopProtection'+currentAtomIndex+' > 0 && (min'+currentAtomIndex+' < ++count'+currentAtomIndex+' || !max'+currentAtomIndex+' || count'+currentAtomIndex+' < max'+currentAtomIndex+'));\n' +
+        'if (loopProtection'+currentAtomIndex+' <= 0) throw "Loop protection!";\n' +
+        // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
+        'group'+tokenGroupNumber+' = count'+currentAtomIndex+' >= min'+currentAtomIndex+';\n' +
+      '}\n' +
+      '';
+
+    return s;
+  }
+  function parseNumbers() {
+    var s = '';
+    var peek = rule[pos++];
+    while (peek > '0' && peek < '9') {
+
+    }
+    --pos;
+    consume();
+
+    return parseInt(s, 10);
   }
 
   var code = parseRule();

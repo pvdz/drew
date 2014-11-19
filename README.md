@@ -31,7 +31,8 @@ Quantifiers quantify tokens and token-groups in a regex-esque fashion
 
 A quantifier only quantifies over the token or group that immediately precedes it, never more. 
 
-You can pick out which tokens to receive in the callback by suffixing `=n`, where `n` is the argument offsetting at `0`. Note that for any group, the first token that matched is passed on.
+You can pick out which tokens to receive in the callback by suffixing `=n`, where `n` is the argument offsetting at `0`. Note that for any group/repeat, this is the first matched token.
+You can also get the last token by putting a name after a comma; `[foo]=1,2`, in which case the first name is even optional `[foo]=,2`. For a group/repeat this will be the last matched token.
 alternatively you can get them as keys on an object by making `n` a non-integer identifier (the name can still lead with a number). if one such name is encountered, the callback receives one object.
 if arg 0 was not assigned it will default to the start of the match.
 you can only suffix these at token boundaries, after the (optional) quantifiers

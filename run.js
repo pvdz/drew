@@ -3,15 +3,14 @@ module.exports = run;
 function run(tokens, ruleCode, handler){
 //  console.log('######');
 
-  tokens[-1] = {type:-1, value:''}; // hack to get SOL to work. needs to consume a token even though there is none... // TODO: make sure this token is never actually returned
-
-  var index = -1;
+  var index = 0;
+  var max = tokens.length - 1; // dont start at EOF token, it's artificial
   var check = compile(ruleCode, tokens);
 
 //  console.log('Running on '+tokens.length+' tokens...');
 //  console.log('######')
 
-  while (index < tokens.length) {
+  while (index < max) {
     check(index, handler);
     // TODO: support some way of skipping the matched part, configurable from the rule
     ++index;
@@ -21,7 +20,6 @@ function run(tokens, ruleCode, handler){
 function compile(ruleCode, tokens) {
 //  console.log(ruleCode);
 
-  var SOL = -1;
   var STRING = 10;
   var NUMBER = 7;
   var REGEX = 8;
@@ -55,12 +53,16 @@ function compile(ruleCode, tokens) {
     if (type) return tokens[index].type === type;
     return tokens[index].type;
   }
+  function isNewline(delta) {
+    var token = tokens[index+delta];
+    return token.value === '\x0A' || token.value === '\x0D' || token.value === '\x0A\x0D' || token.value === '\u2028' || token.value === '\u2029';
+  }
   function next() {
     ++index;
   }
   function seek() {
     var t = tokens[index];
-    var isWhite = t && (t.type === WHITE || t.type === SOL);
+    var isWhite = t && (t.type === WHITE || t.type === EOF);
 
     if (isWhite) {
       if (from === index) return false; // wait till first token is black before actually matching
@@ -71,7 +73,7 @@ function compile(ruleCode, tokens) {
   function nextBlack() {
     do {
       var t = tokens[++index];
-    } while (t && (t.type === WHITE || t.type === SOL));
+    } while (t && (t.type === WHITE || t.type === EOF));
   }
   function symw() {
     symbolStarts.push(index);
@@ -157,7 +159,7 @@ function compile(ruleCode, tokens) {
     }
 
     // set afterwards because of the `length` case
-    args[name] = token(index);
+    args[name] = token(Math.min(tokens.length-1, Math.max(0, index)));
   }
 
   return function check(start, handler) {

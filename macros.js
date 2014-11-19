@@ -11,15 +11,12 @@ var macros = module.exports = {
   CRLF: '`\\x0A\\x0D`',
   PS: '`\\u2028`',
   LS: '`\\u2029`',
-  NEWLINE: '(LF | CR | CRLF | PS | LS)',
 
-  SOL: '(NEWLINE | SOF)',
-  EOL: '(NEWLINE | EOF)',
-
-  STARTOFLINE: 'SOL',
-  ENDOFLINE: 'EOL',
-  STARTOFFILE: 'SOF',
-  ENDOFFILE: 'EOF',
+  // alias
+  SOF: 'STARTOFFILE',
+  EOF: 'ENDOFFILE',
+  SOL: 'STARTOFLINE',
+  EOL: 'ENDOFLINE',
 
   COMMA: '`,`',
   PLUS: '`+`',

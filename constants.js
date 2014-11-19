@@ -1,4 +1,5 @@
 // hardcoded conditions (symbol translates to the actual JS that you see)
+
 var constants = module.exports = {
   // tokens (as governed by zeparser)
   STRING: 'type(STRING)',
@@ -12,5 +13,9 @@ var constants = module.exports = {
   WHITE: 'type(WHITE)',
 
   // custom hacks
-  SOF: 'type(SOL)', // injected by run.js as the -1 token
+  NEWLINE: 'isNewline(0)',
+  STARTOFLINE: '(!index || isNewline(-1))',
+  ENDOFLINE: '(token(index+1).type === EOF || isNewline(1))',
+  STARTOFFILE: '!index',
+  ENDOFFILE: 'token(index-1).type === EOF',
 };
