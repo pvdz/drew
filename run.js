@@ -70,6 +70,10 @@ function compile(ruleCode, tokens) {
     }
     return true;
   }
+  function skipTo(newIndex) {
+    index = newIndex;
+    return true;
+  }
   function nextBlack() {
     do {
       var t = tokens[++index];
