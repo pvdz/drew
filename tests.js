@@ -144,13 +144,13 @@ var tests = module.exports = [
     'any (matches any space and 1, triggers multiple times)'
   ],
   [
-    '[`=`][SPACE]*[NUMBER]=0,1',
+    '[IS][SPACE]*[NUMBER]=0,1',
     'x =   1;',
     'x =   $;',
     'quantifier: any'
   ],
   [
-    '[`=`][SPACE]*[NUMBER]=,1',
+    '[IS][SPACE]*[NUMBER]=,1',
     'x =   1;',
     'x @   $;',
     'quantifier: any'
@@ -187,12 +187,111 @@ var tests = module.exports = [
     'var@$b;',
     'test range params for grouped conditionals of different length; short'
   ],
-//  [
-//    '([SPACE]|[TAB])=0|([COMMA]|[NUMBER])=1',
-//    'var x\t= 5, y;',
-//    'var@x@=@$@ y;',
-//    'OR between tokens'
-//  ],
+  [
+    '([SPACE]|[TAB])=0|([COMMA]|[NUMBER])=1',
+    'var x\t= 5, y;',
+    'var@x@=@$$@y;',
+    'OR between tokens'
+  ],
+
+  [
+    '{IS}{SQUARE_PAIR}{SEMI}=0',
+    'var a = [1,2,3];',
+    'var a = [1,2,3]@',
+    'skip array',
+  ],
+  [
+    '{IS}{IDENTIFIER}{SQUARE_PAIR}{SEMI}=0',
+    'var a = foo[1,2,3];',
+    'var a = foo[1,2,3]@',
+    'skip dyn prop',
+  ],
+  [
+    '{IS}{CURLY_PAIR}{SEMI}=0',
+    'var a = {a:b};',
+    'var a = {a:b}@',
+    'skip object literal'
+  ],
+  [
+    '{PAREN_PAIR}{CURLY_PAIR}=0',
+    'if (foo) { var a = bar; }',
+    'if (foo) @ var a = bar; }',
+    'skip block statement'
+  ],
+  [
+    '{IS}{CURLY_PAIR}{SEMI}=0',
+    'if (foo) { var a = {A:B}; }',
+    'if (foo) { var a = {A:B}@ }',
+    'skip block statement with nested objlit'
+  ],
+  [
+    '{PAREN_PAIR}{CURLY_PAIR}=0,1{IDENTIFIER}',
+    'function f() { foo === bar; }\nf();',
+    'function f() @ foo === bar; $\nf();',
+    'skip function body'
+  ],
+  [
+    '{SWITCH}{PAREN_PAIR}{CURLY_PAIR}=0',
+    'switch (call()) { case 0: foo; break; default: break; }',
+    'switch (call()) @ case 0: foo; break; default: break; }',
+    'skip switch body'
+  ],
+  [
+    '{IDENTIFIER}{PAREN_PAIR}?{CURLY_PAIR}',
+    'try { foo; bar; } catch (e) {} finally { }',
+    '@ { foo; bar; } @ (e) {} @ { }',
+    'skip try/catch/finally curlies'
+  ],
+  [
+    '{STATEMENT_KEYWORD}{PAREN_PAIR}{*}=0',
+    'if (foo) bar;',
+    'if (foo) @;',
+    'skip statement parens'
+  ],
+  [
+    '{PAREN_PAIR}{SEMI}=0',
+    'do { foo; } while (bar);',
+    'do { foo; } while (bar)@',
+    'skip statement header'
+  ],
+  [
+    '{IDENTIFIER}{PAREN_PAIR}{SEMI}=0',
+    'foo();',
+    'foo()@',
+    'call parens'
+  ],
+  [
+    '{PLUS}{PAREN_PAIR}{SEMI}=0',
+    'a + (b - c);',
+    'a + (b - c)@',
+    'skip expression group'
+  ],
+  [
+    '{CATCH}{PAREN_PAIR}{CURLY_OPEN}=0',
+    'try {} catch (e) {}',
+    'try {} catch (e) @}',
+    'skip expression group'
+  ],
+
+  [
+    '{VAR}=0 {IDENTIFIER}=1',
+    'var foo = 5;',
+    '@ $ = 5;',
+    'regression'
+  ],
+  [
+    '{VAR & KEYWORD}=0 {IDENTIFIER}=1',
+    'var foo = 5;',
+    '@ $ = 5;',
+    'regression keyword'
+  ],
+  [
+    '[TAB|SPACE]*=2,3 {VAR & KEYWORD}=0 {IDENTIFIER}=1',
+    '\t\t var foo = 5;',
+    '#\t#@ $ = 5;',
+    'regression'
+  ],
+
 
 //  [
 //    '{`function` & KEYWORD}=0 {IDENTIFIER} {`(`} ({IDENTIFIER} ({COMMA} {IDENTIFIER})*)?=1,2 {`)`}{`{`}=3',
