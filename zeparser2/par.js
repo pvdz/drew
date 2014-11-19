@@ -277,8 +277,9 @@
       }
 
       if (c === ORD_OPEN_CURLY) { // 33.2%
+        var curly = tok.lastToken;
         tok.next(EXPR);
-        this.parseBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet);
+        this.parseBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet, curly);
         return PARSEDSOMETHING;
       }
 
@@ -398,8 +399,11 @@
     },
     parseStatementHeader: function(){
       var tok = this.tok;
+      var paren = tok.lastToken;
+      if (paren) paren.statementHeader = true;
       tok.mustBeNum(ORD_OPEN_PAREN, NEXTTOKENCANBEREGEX);
       this.parseExpressions();
+      if (paren) paren.rhp = tok.lastToken;
       tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEREGEX);
     },
 
@@ -410,6 +414,7 @@
       // - ,foo=bar
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.next(PUNC);
       if (USE_LOOP_GUARDS) var guard = 100000; // #zp-build loopguard
 
@@ -448,7 +453,7 @@
       // if (<exprs>) <stmt> else <stmt>
 
       var tok = this.tok;
-
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.next(PUNC);
       this.parseStatementHeader();
       this.parseStatement(inFunction, inLoop, inSwitch, labelSet, REQUIRED, EMPTY_LABELSET);
@@ -462,12 +467,17 @@
       // do <stmt> while ( <exprs> ) ;
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
 
       tok.next(EXPR); // do
       this.parseStatement(inFunction, inLoop || INLOOP, inSwitch, labelSet, REQUIRED, EMPTY_LABELSET);
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.mustBeString('while', NEXTTOKENCANBEDIV);
+      var paren = tok.lastToken;
+      if (paren) paren.statementHeader = true;
       tok.mustBeNum(ORD_OPEN_PAREN, NEXTTOKENCANBEREGEX);
       this.parseExpressions();
+      if (paren) paren.rhp = tok.lastToken;
       tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEREGEX);
 
       // spec requires the semi but browsers made it optional
@@ -478,6 +488,7 @@
     parseWhile: function(inFunction, inSwitch, labelSet, inLoop){
       // while ( <exprs> ) <stmt>
 
+      if (this.tok.lastToken) this.tok.lastToken.isKeyword = true;
       this.tok.next(PUNC);
       this.parseStatementHeader();
       this.parseStatement(inFunction, inLoop || INLOOP, inSwitch, labelSet, REQUIRED, EMPTY_LABELSET);
@@ -490,6 +501,8 @@
 
       var tok = this.tok;
       tok.next(PUNC); // for
+      var paren = tok.lastToken;
+      if (paren) paren.statementHeader = true;
       tok.mustBeNum(ORD_OPEN_PAREN, NEXTTOKENCANBEREGEX);
 
       if (tok.nextExprIfNum(ORD_SEMI)) this.parseForEachHeader(); // empty first expression in for-each
@@ -507,6 +520,7 @@
         else this.parseForInHeader();
       }
 
+      if (paren) paren.rhp = tok.lastToken;
       tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEREGEX);
       this.parseStatement(inFunction, inLoop || INLOOP, inSwitch, labelSet, REQUIRED, EMPTY_LABELSET);
     },
@@ -530,6 +544,7 @@
       // newline right after keyword = asi
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
 
       if (!inLoop) tok.throwSyntaxError('Can only continue in a loop');
 
@@ -556,6 +571,7 @@
       // newline right after keyword = asi
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       var type = tok.next(PUNC); // token after break cannot be a regex, either way.
 
       if (type !== IDENTIFIER || tok.lastNewline) {
@@ -580,6 +596,7 @@
       // newline right after keyword = asi
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
 
       if (!inFunction && !this.options.functionMode) tok.throwSyntaxError('Can only return in a function');
 
@@ -591,6 +608,7 @@
       // throw <exprs> ;
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.next(EXPR);
       if (tok.lastNewline) tok.throwSyntaxError('No newline allowed directly after a throw, ever');
 
@@ -601,8 +619,10 @@
       // switch ( <exprs> ) { <switchbody> }
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.next(PUNC);
       this.parseStatementHeader();
+      var curly = tok.lastToken;
       tok.mustBeNum(ORD_OPEN_CURLY, NEXTTOKENCANBEREGEX);
 
       var value = tok.getLastValue();
@@ -617,10 +637,12 @@
         if (tok.getLastValue() === 'default' && ++defaults > 1) tok.throwSyntaxError('Only one default allowed per switch');
       }
 
+      if (curly) curly.rhc = tok.lastToken;
       tok.mustBeNum(ORD_CLOSE_CURLY, NEXTTOKENCANBEREGEX);
     },
     parseCase: function(inSwitch){
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       if (!inSwitch) tok.throwSyntaxError('Can only use case in a switch');
       tok.next(EXPR);
       this.parseExpressions();
@@ -629,6 +651,7 @@
     parseDefault: function(inSwitch){
       var tok = this.tok;
       if (!inSwitch) tok.throwSyntaxError('Can only use default in a switch'); // cant really hit this right now because label checks supersede it
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.next(EXPR);
       tok.mustBeNum(ORD_COLON, NEXTTOKENCANBEDIV);
     },
@@ -638,6 +661,7 @@
       // try { <stmts> } catch ( <idntf> ) { <stmts> } finally { <stmts> }
 
       var tok = this.tok;
+      if (tok.lastToken) tok.lastToken.isKeyword = true;
       tok.next(PUNC);
       this.parseCompleteBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet);
 
@@ -650,7 +674,12 @@
       // catch ( <idntf> ) { <stmts> }
 
       var tok = this.tok;
-      if (tok.nextPuncIfString('catch')) {
+      if (tok.getLastValue() === 'catch') {
+        if (tok.lastToken) tok.lastToken.isKeyword = true;
+        tok.next(EXPR);
+
+        var paren = tok.lastToken;
+        if (paren) paren.statementHeader = true;
         var type = tok.mustBeNum(ORD_OPEN_PAREN, NEXTTOKENCANBEDIV);
 
         // catch var
@@ -661,6 +690,7 @@
           tok.throwSyntaxError('Missing catch scope variable');
         }
 
+        if (paren) paren.rhp = tok.lastToken;
         tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEDIV);
         this.parseCompleteBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet);
       }
@@ -668,19 +698,24 @@
     parseFinally: function(inFunction, inLoop, inSwitch, labelSet){
       // finally { <stmts> }
 
-      if (this.tok.nextPuncIfString('finally')) {
+      var tok = this.tok;
+      if (tok.getLastValue() === 'finally') {
+        if (tok.lastToken) tok.lastToken.isKeyword = true;
+        tok.next(EXPR);
         this.parseCompleteBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet);
       }
     },
     parseDebugger: function(){
       // debugger ;
 
+      if (this.tok.lastToken) this.tok.lastToken.isKeyword = true;
       this.tok.next(EXPR);
       this.parseSemi();
     },
     parseWith: function(inFunction, inLoop, inSwitch, labelSet){
       // with ( <exprs> ) <stmts>
 
+      if (this.tok.lastToken) this.tok.lastToken.isKeyword = true;
       this.tok.next(PUNC);
       this.parseStatementHeader();
       this.parseStatement(inFunction, inLoop, inSwitch, labelSet, REQUIRED, EMPTY_LABELSET);
@@ -706,8 +741,11 @@
      */
     parseFunctionRemainder: function(paramCount, nextExpr){
       var tok = this.tok;
+      var paren = tok.lastToken;
+      if (paren) paren.functionHeader = true;
       tok.mustBeNum(ORD_OPEN_PAREN, NEXTTOKENCANBEDIV);
       this.parseParameters(paramCount);
+      if (paren) paren.rhp = tok.lastToken;
       tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEDIV);
       this.parseCompleteBlock(nextExpr, INFUNCTION, NOTINLOOP, NOTINSWITCH, EMPTY_LABELSET);
     },
@@ -736,16 +774,18 @@
         tok.throwSyntaxError('Setters have exactly one param');
       }
     },
-    parseBlock: function(nextExpr, inFunction, inLoop, inSwitch, labelSet){
+    parseBlock: function(nextExpr, inFunction, inLoop, inSwitch, labelSet, curly){
       this.parseStatements(inFunction, inLoop, inSwitch, labelSet);
       // note: this parsing method is also used for functions. the only case where
       // the closing curly can be followed by a division rather than a regex lit
       // is with a function expression. that's why we needed to make it a parameter
+      if (curly) curly.rhc = this.tok.lastToken;
       this.tok.mustBeNum(ORD_CLOSE_CURLY, nextExpr);
     },
     parseCompleteBlock: function(nextExpr, inFunction, inLoop, inSwitch, labelSet){
+      var curly = this.tok.lastToken;
       this.tok.mustBeNum(ORD_OPEN_CURLY, NEXTTOKENCANBEREGEX);
-      this.parseBlock(nextExpr, inFunction, inLoop, inSwitch, labelSet);
+      this.parseBlock(nextExpr, inFunction, inLoop, inSwitch, labelSet, curly);
     },
     parseSemi: function(){
       var tok = this.tok;
@@ -1120,17 +1160,25 @@
         return NOTASSIGNABLE;
       }
 
-      if (tok.nextExprIfNum(ORD_OPEN_PAREN)) {
-        return this.parseGroup();
+      var c = tok.firstTokenChar;
+
+      if (c === ORD_OPEN_PAREN) {
+        var paren = tok.lastToken;
+        this.tok.mustBeNum(ORD_OPEN_PAREN, NEXTTOKENCANBEREGEX);
+        return this.parseGroup(paren);
       }
 
-      if (tok.nextExprIfNum(ORD_OPEN_CURLY)) {
-        this.parseObject();
+      if (c === ORD_OPEN_CURLY) {
+        var curly = tok.lastToken;
+        this.tok.mustBeNum(ORD_OPEN_CURLY, NEXTTOKENCANBEREGEX);
+        this.parseObject(curly);
         return NOTASSIGNABLE;
       }
 
-      if (tok.nextExprIfNum(ORD_OPEN_SQUARE)) {
-        this.parseArray();
+      if (c === ORD_OPEN_SQUARE) {
+        var square = this.tok.lastToken;
+        this.tok.mustBeNum(ORD_OPEN_SQUARE, NEXTTOKENCANBEREGEX);
+        this.parseArray(square);
         return NOTASSIGNABLE;
       }
 
@@ -1160,8 +1208,10 @@
         if (c > 0x2e) {
           // only c>0x2e relevant is OPEN_SQUARE
           if (c !== ORD_OPEN_SQUARE) break;
+          var square = tok.lastToken;
           tok.next(EXPR);
           this.parseExpressions(); // required
+          if (square) square.rhs = tok.lastToken;
           tok.mustBeNum(ORD_CLOSE_SQUARE, NEXTTOKENCANBEDIV); // ] cannot be followed by a regex (not even on new line, asi wouldnt apply, would parse as div)
           if (!unassignableUntilAfterCall && !assignable) assignable = ASSIGNABLE; // trailing property
         } else if (c === ORD_DOT) {
@@ -1171,8 +1221,10 @@
           tok.mustBeIdentifier(NEXTTOKENCANBEDIV); // cannot be followed by a regex (not even on new line, asi wouldnt apply, would parse as div)
           if (!unassignableUntilAfterCall && !assignable) assignable = ASSIGNABLE; // trailing property
         } else if (c === ORD_OPEN_PAREN) {
+          var paren = tok.lastToken;
           tok.next(EXPR);
           this.parseOptionalExpressions();
+          if (paren) paren.rhp = tok.lastToken;
           tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEDIV); // ) cannot be followed by a regex (not even on new line, asi wouldnt apply, would parse as div)
           unassignableUntilAfterCall = false;
           assignable = allowCallAssignment; // call, only assignable in IE
@@ -1277,13 +1329,14 @@
       return false;
     },
 
-    parseGroup: function(){
+    parseGroup: function(paren){
       // the expressions is required, the group is nonassignable if:
       // - wraps multiple expressions
       // - if the single expression is nonassignable
       // - if it wraps an assignment
       var groupAssignable = this.parseExpressions();
 
+      if (paren) paren.rhp = this.tok.lastToken;
       // groups cannot be followed by a regex (not even on new line, asi wouldnt apply, would parse as div)
       this.tok.mustBeNum(ORD_CLOSE_PAREN, NEXTTOKENCANBEDIV);
 
@@ -1291,7 +1344,7 @@
 
       return groupAssignable;
     },
-    parseArray: function(){
+    parseArray: function(square){
       var tok = this.tok;
       if (USE_LOOP_GUARDS) var guard = 100000; // #zp-build loopguard
       do {
@@ -1299,10 +1352,11 @@
         this.parseExpressionOptional(); // just one because they are all optional (and arent in expressions)
       } while (tok.nextExprIfNum(ORD_COMMA)); // elision
 
+      if (square) square.rhs = tok.lastToken;
       // array lits cannot be followed by a regex (not even on new line, asi wouldnt apply, would parse as div)
       tok.mustBeNum(ORD_CLOSE_SQUARE, NEXTTOKENCANBEDIV);
     },
-    parseObject: function(){
+    parseObject: function(curly){
       var tok = this.tok;
       if (USE_LOOP_GUARDS) var guard = 100000; // #zp-build loopguard
       do {
@@ -1311,6 +1365,7 @@
         if (type === IDENTIFIER || type === STRING || type === NUMBER) this.parsePair(); // 84% 9% 1% = 94%
       } while (tok.nextExprIfNum(ORD_COMMA)); // elision
 
+      if (curly) curly.rhc = tok.lastToken;
       // obj lits cannot be followed by a regex (not even on new line, asi wouldnt apply, would parse as div)
       tok.mustBeNum(ORD_CLOSE_CURLY, NEXTTOKENCANBEDIV);
     },

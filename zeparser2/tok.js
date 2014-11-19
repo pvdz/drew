@@ -248,6 +248,9 @@
     /** @property {boolean} lastNewline Was the current token preceeded by a newline? For determining ASI. */
     lastNewline: false,
 
+    /** @property {Object} lastToken The last token that was parsed (not consumed). Basically the token currently being evaluated */
+    lastToken: null,
+
     // .charCodeAt(this.lastOffset) cache
     firstTokenChar: 0,
 
@@ -423,6 +426,7 @@
 
       if (saveTokens) {
         token.black = this.tokenCountBlack++;
+        this.lastToken = token;
         if (options.createBlackStream) {
           this.black.push(token);
         }
