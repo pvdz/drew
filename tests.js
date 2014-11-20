@@ -292,6 +292,33 @@ var tests = module.exports = [
     'regression'
   ],
 
+  [
+    '[SPACE]=0:the_space_start',
+    ' ',
+    '@',
+    'test param name comment start'
+  ],
+  [
+    '[SPACE]=0,1:the_space_stop',
+    ' ',
+    '$',
+    'test param name comment stop'
+  ],
+  [
+    '[SPACE]=0:the_space,1:same_space',
+    ' ',
+    '$',
+    'test param name comment both'
+  ],
+  [
+    '[SPACE]=,0:same_space',
+    ' ',
+    '@',
+    'test param name comment without start'
+  ],
+
+  // repeat match condition quantifier
+  // repeated quantifier groups range start seems to reset at each (subsequent) match
 
 //  [
 //    '{`function` & KEYWORD}=0 {IDENTIFIER} {`(`} ({IDENTIFIER} ({COMMA} {IDENTIFIER})*)?=1,2 {`)`}{`{`}=3',

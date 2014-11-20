@@ -13,6 +13,7 @@ function parse(rule, hardcoded, macros) {
   var NOT_TOPLEVEL = false;
   var INSIDE_TOKEN = true;
   var OUTSIDE_TOKEN = false;
+  var ALLOW_LEADING_NUMS = true;
 
   var counter = 0;
   var tokenCounter = 0;
@@ -292,11 +293,19 @@ function parse(rule, hardcoded, macros) {
         assignmentString += ', undefined';
       } else {
         assignmentString += parseAssignmentKey();
+        if (peek(':')) {
+          consume();
+          if (!parseIdentifier(ALLOW_LEADING_NUMS)) console.warn('name comment was empty');
+        }
       }
 
       if (peek() === ',') {
         assert(',');
         assignmentString += parseAssignmentKey();
+        if (peek(':')) {
+          consume();
+          if (!parseIdentifier(ALLOW_LEADING_NUMS)) console.warn('name comment was empty');
+        }
       } else if (forced) {
         assignmentString += ', undefined';
       }
@@ -307,21 +316,25 @@ function parse(rule, hardcoded, macros) {
     return assignmentString;
   }
   function parseAssignmentKey() {
+    var name = parseIdentifier(ALLOW_LEADING_NUMS);
+    if (!name) reject('Missing valid var name after equal sign');
+    return ', \'' + name + '\'';
+  }
+  function parseIdentifier(allowLeadingNums) {
     var name = '';
     while (true) {
       var peeked = rule[pos];
-      if (peeked && (peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
+      if (peeked && (peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (allowLeadingNums && peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
         name += rule[pos++];
       }
       else break;
+      allowLeadingNums = true;
     }
     // skip whitespace after name...
     --pos;
     consume();
 
-    if (!name) reject('Missing valid var name after equal sign');
-
-    return ', \'' + name + '\'';
+    return name;
   }
 
   function injectMacro(macro, from, to, insideToken, tokenGroupIndex) {
