@@ -1,23 +1,27 @@
 module.exports = run;
 
-function run(tokens, ruleCode, handler){
+function run(tokens, ruleCode, handler, mode){
 //  console.log('######');
 
   var index = 0;
   var max = tokens.length - 1; // dont start at EOF token, it's artificial
-  var check = compile(ruleCode, tokens);
+  var check = compile(ruleCode, tokens, mode);
+  var count = 0;
 
 //  console.log('Running on '+tokens.length+' tokens...');
 //  console.log('######')
 
   while (index < max) {
-    check(index, handler);
-    // TODO: support some way of skipping the matched part, configurable from the rule
-    ++index;
+    var lastIndex = check(index, handler);
+
+    if (mode === 'once') break;
+
+    if (mode === 'after') index = lastIndex+1;
+    else ++index;
   }
 }
 
-function compile(ruleCode, tokens) {
+function compile(ruleCode, tokens, mode) {
 //  console.log(ruleCode);
 
   var STRING = 10;
@@ -191,8 +195,16 @@ function compile(ruleCode, tokens) {
       if (!args) handler(token(start));
       else if (nonIntKeys) handler(args);
       else handler.apply(undefined, args);
+
+      if (mode === 'once') return true;
+      if (mode === 'after') return index-1; // last token evaluated by rule
+      return;
     } else {
       argStack.length = 0;
+
+      if (mode === 'once') return false;
+      if (mode === 'after') return start; // continue as usual
+      return;
     }
   }
 }
