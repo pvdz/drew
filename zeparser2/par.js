@@ -261,6 +261,7 @@
     },
     parseStatement: function(inFunction, inLoop, inSwitch, labelSet, optional, freshLabels){
       if (this.tok.lastType === IDENTIFIER) {
+        this.tok.lastToken.statementStart = true;
         this.parseIdentifierStatement(inFunction, inLoop, inSwitch, labelSet, freshLabels);
         return PARSEDSOMETHING;
       }
@@ -277,6 +278,7 @@
       }
 
       if (c === ORD_OPEN_CURLY) { // 33.2%
+        this.tok.lastToken.statementStart = true;
         var curly = tok.lastToken;
         tok.next(EXPR);
         this.parseBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet, curly);
@@ -291,11 +293,13 @@
       // relative to this function: punc=96%, string=4%, number=1%, rest 0%
 
       if (c === ORD_OPEN_PAREN) { // 56%
+        this.tok.lastToken.statementStart = true;
         this.parseExpressionStatement();
         return PARSEDSOMETHING;
       }
 
       if (c === ORD_SEMI) { // 26% empty statement
+        this.tok.lastToken.statementStart = true;
         // this shouldnt occur very often, but they still do.
         tok.next(EXPR);
         return PARSEDSOMETHING;
@@ -303,6 +307,7 @@
 
       if (c === ORD_PLUS || c === ORD_MIN) { // 5% 3%
         if (tok.getNum(1) === c || tok.lastLen === 1) {
+          this.tok.lastToken.statementStart = true;
           this.parseExpressionStatement();
           return PARSEDSOMETHING;
         }
@@ -313,12 +318,14 @@
 
       // rare
       if (type === STRING || c === ORD_OPEN_SQUARE) { // 4% 2%
+        this.tok.lastToken.statementStart = true;
         this.parseExpressionStatement();
         return PARSEDSOMETHING;
       }
 
       // almost never
       if (c === ORD_EXCL) { // 2%
+        this.tok.lastToken.statementStart = true;
         if (tok.lastLen === 1) {
           this.parseExpressionStatement();
           return PARSEDSOMETHING;
@@ -328,6 +335,7 @@
 
       // now you're just running tests
       if (type === NUMBER || c === ORD_TILDE || type === REGEX) { // 1% 0% 0%
+        this.tok.lastToken.statementStart = true;
         this.parseExpressionStatement();
         return PARSEDSOMETHING;
       }

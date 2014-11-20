@@ -19,6 +19,8 @@ var constants = module.exports = {
   STARTOFFILE: '!index',
   ENDOFFILE: 'token(index-1).type === EOF',
 
+  STATEMENT_START: 'token().statementStart',
+
   // skip from current curly to after the next
   JUMP_TO_RHC: '(token().rhc && skipTo(token().rhc.white))',
   JUMP_TO_RHS: '(token().rhs && skipTo(token().rhs.white))',
