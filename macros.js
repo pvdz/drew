@@ -20,6 +20,7 @@ var macros = module.exports = {
 
   COMMA: '`,`',
   PLUS: '`+`',
+  MIN: '`+`',
   IS: '`=`',
   SEMI: '`;`',
   CURLY_OPEN: '`{`',
