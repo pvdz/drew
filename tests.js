@@ -317,6 +317,219 @@ var tests = module.exports = [
     'test param name comment without start'
   ],
 
+  [
+    '[SPACE][SPACE]{NUMBER}',
+    '    5;',
+    '@@@ 5;',
+    'because the last token is black, it skips the other spaces'
+  ],
+  [
+    '[SPACE][SPACE][NUMBER]',
+    '    5;',
+    '  @ 5;',
+  ],
+  [
+    '[SPACE]?[NUMBER]',
+    '5;',
+    '@;',
+    'should have match start at number for missing optional space'
+  ],
+  [
+    '[SPACE]?[NUMBER]',
+    ' 5;',
+    '@@;',
+    'should have match start at both'
+  ],
+  [
+    '[SPACE]?[NUMBER]',
+    '+5;',
+    '+@;',
+    'should have match start at number for missing optional space'
+  ],
+  [
+    '([SPACE][SPACE]?){NUMBER}',
+    ' 1 + 2+3+  4+    5;',
+    '@1 +@2+3+@@4+@@@@5;',
+    'the one or two spaces may have any additional whitespace between the number'
+  ],
+  [
+    '([SPACE][SPACE]?)[NUMBER]',
+    '   1;',
+    ' @@1;',
+    'the one or two spaces must be connected to the number'
+  ],
+  [
+    '([SPACE][SPACE]?)[NUMBER]',
+    ' 1 + 2+3+  4+    5;',
+    '@1 +@2+3+@@4+  @@5;',
+    'the one or two spaces must be connected to the number'
+  ],
+  [
+    '([SPACE][SPACE])?{NUMBER}',
+    ' 1;',
+    ' @;',
+    'dont match one space, either two or none'
+  ],
+  [
+    '([SPACE][SPACE])?{NUMBER}',
+    ' 1 + 2+3+  4+    5;',
+    ' @ + @+@+@ @+@@@ @;',
+    'the two spaces are optional, should not match starting at the space before the number'
+  ],
+
+  [
+    '{NUMBER}({PLUS})=0',
+    '1 + 2;',
+    '1 @ 2;',
+    'first black token of a group should start at black token not whitespace'
+  ],
+  [
+    '(([SPACE][SPACE])?{NUMBER})',
+    ' 1 + 2+3+  4+    5;',
+    ' @ + @+@+@ @+@@@ @;',
+    'start with white or black?'
+  ],
+
+  [
+    '{`1`}({PLUS}{NUMBER})=0,1 {PLUS}=2',
+    '1 + 2 + 3 + 4 + 5 + x;',
+    '1 @ $ # 3 + 4 + 5 + x;',
+    'once'
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})?=0,1 {PLUS}=2',
+    '1 + 2 + 3 + 4 + 5 + x;',
+    '1 @ $ # 3 + 4 + 5 + x;',
+    'maybe'
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})?=0,1 {PLUS}=2',
+    '1 + x + x + x + x + x;',
+    '@ # x + x + x + x + x;',
+    'any'
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})+=0,1 {PLUS}=2',
+    '1 + 2 + 3 + 4 + 5 + x;',
+    '1 @ 2 + 3 + 4 + $ # x;',
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})+=0,1 {PLUS}=2',
+    '1 + x + x + x + x + x;',
+    '1 + x + x + x + x + x;',
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})2=0,1 {PLUS}=2',
+    '1 + 2 + 3 + 4 + 5 + x;',
+    '1 @ 2 + $ # 4 + 5 + x;',
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})2...=0,1 {PLUS}=2',
+    '1 + 2 + 3 + 4 + 5 + x;',
+    '1 @ 2 + 3 + 4 + $ # x;',
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})2...=0,1 {PLUS}=2',
+    '1 + 2 + x + x + x + x;',
+    '1 + 2 + x + x + x + x;',
+    'matching but not matching enough, so no match'
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})2..3=0,1 {PLUS}=2',
+    '1 + 2 + 3 + 4 + 5 + x;',
+    '1 @ 2 + 3 + $ # 5 + x;',
+  ],
+  [
+    '{`1`}({PLUS}{NUMBER})2..3=0,1 {PLUS}=2',
+    '1 + 2 + x + x + x + x;',
+    '1 + 2 + x + x + x + x;',
+    'matching but not matching enough, so no match'
+  ],
+  [
+    '{`1`}(({PLUS}{NUMBER})2|[SPACE])=0,1 {PLUS}=2',
+    '1 + x + 3 + 4 + 5 + x;',
+    '1$# x + 3 + 4 + 5 + x;',
+    'trackback from black token to match a white token'
+  ],
+  [
+    '{PLUS}2|[SPACE]',
+    '  + - - 1;',
+    '@@+@-@-@1;',
+    'trackback after partial quantative match'
+  ],
+  [
+    '({PLUS}2|[SPACE])',
+    '  + - - 1;',
+    '@@+@-@-@1;',
+    'trackback after partial quantative match, grouped'
+  ],
+  [
+    '[SPACE]({PLUS}2|[SPACE])',
+    '  + - - 1;',
+    '@ + - - 1;',
+    'trackback after partial quantative match with leading match'
+  ],
+  [
+    '({MIN}{PLUS}2)|[SPACE]',
+    '  - + - 1;',
+    '@@-@+@-@1;',
+    'trackback after partial quantative match with leading match'
+  ],
+  [
+    '({PLUS}{PLUS})?|[SPACE]',
+    '  + - - 1;',
+    '@@@@@@@@@@', // wont match anywhere, but is optional, so any character passes
+    'silly ? makes the OR useless'
+  ],
+  [
+    '{`1`}(({PLUS}{NUMBER})2|[SPACE])=0,1 {PLUS}=2',
+    '1 + 2 + x + 4 + 5 + x;',
+    '1$# 2 + x + 4 + 5 + x;',
+    'trackback after matching a group once but not sufficiently so match a white token instead'
+  ],
+
+
+  [
+    '{`y`}({PLUS}{`x`})+',
+    'y + x + x;',
+    '@ + x + x;',
+    'call callback repeated (no args)'
+  ],
+  [
+    '{`y`}({PLUS}{`x`})+=0,1',
+    'y + x + x;',
+    'y @ x + $;',
+    'call callback repeated (no args)'
+  ],
+  [
+    '{`y`}({PLUS}{`x`})+@',
+    'y + x + x;',
+    '@ + x + x;',
+    'call callback repeated (no args)'
+  ],
+  [
+    '{`y`}({PLUS}{`x`})+@=0,1',
+    'y + x + x + x;',
+    'y @ $ @ $ @ $;',
+    'call callback repeated (no args)'
+  ],
+
+
+//  [
+//    '{`1`}({PLUS}{NUMBER})+@=0,1',
+//    '1 + 2 + 3;',
+//    '1 @ 2 + $;',
+//    'call callback repeated'
+//  ],
+
+//  [
+//    '{`1`}({PLUS}{NUMBER})*@=0,1',
+//    '1 + 2 + 3;',
+//    '1 @ $ @ $;',
+//    'callback called repeated'
+//  ],
+
+
   // repeat match condition quantifier
   // repeated quantifier groups range start seems to reset at each (subsequent) match
 

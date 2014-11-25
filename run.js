@@ -44,6 +44,8 @@ function compile(ruleCode, tokens, mode) {
   var argStack = []; // args set while parsing, in array so we can drop them for trackbacks in ORs. the stack is filled in pairs (<arg name:index>)
   var argPointers = []; // marks starts of current conditional group on argStack
 
+  var multiCall = null;
+
   function value(str) {
     var s = tokens[index] && tokens[index].value;
     if (str) return s === str;
@@ -84,46 +86,62 @@ function compile(ruleCode, tokens, mode) {
     } while (t && (t.type === WHITE || t.type === EOF));
   }
   function symw() {
+    updateSymbStarts();
     symbolStarts.push(index);
     return true;
   }
-  function checkToken(matches, startKey, stopKey, loopCount) {
+  function checkToken(matches, startKey, stopKey, loopCount, repeatedCall) {
     var s = symbolStarts.pop();
     if (matches) {
       next();
       queueArgs(s, startKey, stopKey, loopCount);
+      queueRepeatCalls(repeatedCall, startKey, s);
     }
     return matches;
   }
 
   function symb() {
     if (!seek()) return false;
+    updateSymbStarts();
     symbolStarts.push(index);
     return true;
   }
-  function checkTokenBlack(matches, startKey, stopKey, loopCount) {
+  function checkTokenBlack(matches, startKey, stopKey, loopCount, repeatedCall) {
     var s = symbolStarts.pop();
     if (matches) {
       next();
       queueArgs(s, startKey, stopKey, loopCount);
+      queueRepeatCalls(repeatedCall, startKey, s);
     }
     return matches;
   }
 
   function symgt() {
     argPointers.push(argStack.length);
-    symbolStarts.push(index);
+    symbolStarts.push(-1);
+    // at start of symb and symw this list should be scanned for -1 and any encountered (can have
+    // multiple with nested groups) should be replaced with the current index. Can't do it before
+    // because a group can start at either the next white or black token and we can't know at compile time.
   }
-  function checkTokenGroup(matches, startKey, stopKey, loopCount) {
+  function checkTokenGroup(matches, startKey, stopKey, loopCount, repeatedCall, repeatStart) {
     var s = symbolStarts.pop();
     var argPointer = argPointers.pop();
     if (argStack.length < argPointer) console.warn('assertion fail: arg stack is smaller than at start of group');
     if (matches) {
       queueArgs(s, startKey, stopKey, loopCount);
+      queueRepeatCalls(repeatedCall, startKey, s);
     } else {
       argStack.length = argPointer;
     }
     return matches;
+  }
+
+  function updateSymbStarts() {
+    // search top for -1 occurrences
+    // replace each of them with the current index
+    var symbolPos = symbolStarts.length;
+    while (symbolStarts[symbolPos-1] === -1)
+      symbolStarts[--symbolPos] = index
   }
 
   function symgc() {
@@ -142,17 +160,29 @@ function compile(ruleCode, tokens, mode) {
     if (stopKey) argStack.push(stopKey, index-1);
   }
 
-  function flushArgs() {
+  function queueRepeatCalls(repeatedCall, startKey, repeatStart) {
+    if (repeatedCall) {
+      if (!multiCall) multiCall = [];
+      var theseArgs = argStack.slice(0);
+      // make sure start key starts at last repeated part, not entire repeated part
+      if (startKey) theseArgs.push(startKey, repeatStart);
+      multiCall.push(theseArgs);
+    }
+  }
+
+  function flushArgs(theseArgs) {
+    if (theseArgs === undefined) theseArgs = argStack;
+
     // there was a match. all relevant args are in the queue. flush it (in pairs!)
-    if (!argStack.length) return null;
+    if (!theseArgs.length) return null;
 
     var args = {length:0}; // fake array, may be passed on as is if there are any non-int keys. // TOFIX: improve perf here. we can do better than this :)
 
-    if (argStack.length % 2) throw new Error('Assertion error: argStack has an uneven number of arguments');
-    while (argStack.length) {
+    if (theseArgs.length % 2) throw new Error('Assertion error: argStack has an uneven number of arguments');
+    while (theseArgs.length) {
       // go left to right to update quantified values (-> shift vs pop)
-      var key = argStack.shift();
-      var value = argStack.shift();
+      var key = theseArgs.shift();
+      var value = theseArgs.shift();
       setArg(args, key, value);
     }
 
@@ -177,13 +207,32 @@ function compile(ruleCode, tokens, mode) {
     from = start;
     seenZero = false;
     nonIntKeys = false;
+    multiCall = null;
 
     if (argStack.length !== 0) throw new Error('Expect argStack to be empty before rule check ['+argStack+'] ['+argPointers+']');
     if (argPointers.length !== 0) throw new Error('Expect argPointers to be empty before rule check ['+argStack+'] ['+argPointers+']');
 
     var matched = ruleFunction();
 
-    if (matched) {
+    if (multiCall) {
+      multiCall.forEach(function(list, i){
+        var args = flushArgs(list); // may return null
+
+        if (!seenZero && args) {
+          args[0] = token(start);
+          args.length = Math.max(args.length, 1);
+        }
+        if (!args) handler(token(start));
+        else if (nonIntKeys) handler(args);
+        else handler.apply(undefined, args);
+      });
+
+      argStack.length = 0;
+
+      if (mode === 'once') return true;
+      if (mode === 'after') return index-1; // last token evaluated by rule
+      return;
+    } else if (matched) {
       // apply all args currently in the stack
       var args = flushArgs(); // may return null
 
@@ -191,7 +240,6 @@ function compile(ruleCode, tokens, mode) {
         args[0] = token(start);
         args.length = Math.max(args.length, 1);
       }
-
       if (!args) handler(token(start));
       else if (nonIntKeys) handler(args);
       else handler.apply(undefined, args);

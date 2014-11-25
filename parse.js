@@ -18,6 +18,8 @@ function parse(rule, hardcoded, macros) {
   var counter = 0;
   var tokenCounter = 0;
 
+  var hasMultiCall = false;
+
   function white(c) {
     return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\r\n';
   }
@@ -84,7 +86,7 @@ function parse(rule, hardcoded, macros) {
 
   function parseAtomMaybe(top, insideToken, tokenGroupNumber, noCurlies){
     lastAtomStart = pos;
-    var currentAtomIndex = counter++;
+    var currentCounter = counter++;
 
     var beforeQuantifier = '';
     var afterQuantifier = '';
@@ -92,43 +94,45 @@ function parse(rule, hardcoded, macros) {
 
     if (peek('[')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
-      if (noCurlies) beforeQuantifier += '{\n';
-      beforeQuantifier += '// white token '+currentAtomIndex+':'+(tokenCounter++)+'\n';
+      if (noCurlies) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for white token [\n';
+      beforeQuantifier += '// white token '+currentCounter+':'+(tokenCounter++)+'\n';
       beforeQuantifier += 'group'+tokenGroupNumber+' = checkToken(symw()' + parseWhiteToken();
 
       afterQuantifier += ');\n';
-      if (noCurlies) afterQuantifier += '}\n';
+      if (noCurlies) afterQuantifier += '} // ] '+currentCounter+' for white token\n';
 
-      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
+      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
     } else if (peek('{')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
-      if (noCurlies) beforeQuantifier += '{\n';
-      beforeQuantifier += '// black token '+currentAtomIndex+':'+(tokenCounter++)+'\n';
+      if (noCurlies) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for black token {\n';
+      beforeQuantifier += '// black token '+currentCounter+':'+(tokenCounter++)+'\n';
       beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenBlack(symb()' + parseBlackToken();
 
       afterQuantifier += ');\n';
-      if (noCurlies) afterQuantifier += '}\n';
+      if (noCurlies) afterQuantifier += '} // } '+currentCounter+' for black token\n';
 
-      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
+      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
     } else if (peek('(')) {
       if (insideToken) {
         beforeQuantifier += ' && checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
 
-        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
+        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       } else {
-        beforeQuantifier += '{\n';
-        beforeQuantifier += '// start group '+currentAtomIndex+'\n';
-        beforeQuantifier += 'var group'+currentAtomIndex+' = false;\n';
-        beforeQuantifier += 'symgt();\n';
-        beforeQuantifier += parseGroup(OUTSIDE_TOKEN, currentAtomIndex);
-        beforeQuantifier += 'checkTokenGroup(group' + currentAtomIndex;
+        beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for token group (\n';
+        beforeQuantifier += '// start group '+currentCounter+'\n';
+        beforeQuantifier += 'var group'+currentCounter+' = false;\n';
+        beforeQuantifier += 'var groupStart'+currentCounter+' = index;\n';
+        beforeQuantifier += 'symgt(); // '+currentCounter+'\n';
+        beforeQuantifier += parseGroup(OUTSIDE_TOKEN, currentCounter);
+        beforeQuantifier += 'checkTokenGroup(group' + currentCounter;
 
         afterQuantifier += ');\n';
-        afterQuantifier += 'group'+tokenGroupNumber+' = group'+currentAtomIndex+'\n';
-        afterQuantifier += '// end group '+currentAtomIndex+'\n';
-        afterQuantifier += '}\n';
+        afterQuantifier += 'if (!group'+currentCounter+') index = groupStart'+currentCounter+';\n';
+        afterQuantifier += 'group'+tokenGroupNumber+' = group'+currentCounter+'\n';
+        afterQuantifier += '// end group '+currentCounter+'\n';
+        afterQuantifier += '} // ) '+currentCounter+' for token group\n';
 
-        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentAtomIndex);
+        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       }
     } else {
       return false;
@@ -349,13 +353,13 @@ function parse(rule, hardcoded, macros) {
     return s + parseMatchConditions(insideToken, tokenGroupIndex);
   }
 
-  function parseQuantifiers(beforeAssignments, afterAssignments, tokenGroupNumber, currentAtomIndex) {
+  function parseQuantifiers(beforeAssignments, afterAssignments, tokenGroupNumber, currentCounter) {
     // [foo] 1
     // [foo] 1...
     // [foo] 1..2
 
     var min = 0;
-    var max = 0; // 0=infinite upper bound, -1=ignore upper bound (min is absolute bound)
+    var max = 0; // 0=infinite upper bound
 
     var peeked = peek();
 
@@ -383,7 +387,8 @@ function parse(rule, hardcoded, macros) {
         // note: this allows the dots to be spaced, but who cares. this doesn't allow ambiguity and I couldnt care less.
         assert('.');
         assert('.');
-        if (peek('.')) {
+        peeked = peek();
+        if (peeked === '.') {
           assert('.');
           max = 0;
         } else if (peeked < '0' || peeked > '9') {
@@ -394,20 +399,46 @@ function parse(rule, hardcoded, macros) {
       }
     }
 
+    var repeatCall = false;
+
+    // quantifier callback modifiers
+    if (peek('@')) {
+      assert('@');
+      // match for each individual (repeated) match
+      repeatCall = true;
+      hasMultiCall = true;
+    } else if (peek('%')) {
+      assert('%');
+      // pass on start/end tokens for each match in an array
+      // either one array as pairs if only one var assignment
+      // or starts in start and stops in stop parameter if two
+    }
+
     var FORCE_PARAMFILL = true;
+    var innerCounter = counter++;
 
     var result =
-      '{\n' +
-        'var loopProtection'+currentAtomIndex+' = 10000;\n' +
-        'var min'+currentAtomIndex+' = '+min+';\n' +
-        'var max'+currentAtomIndex+' = '+max+';\n' +
-        'var count'+currentAtomIndex+' = 0;\n' +
-        'do {\n' +
-          beforeAssignments + parseAssignments(FORCE_PARAMFILL) + ', count'+currentAtomIndex + afterAssignments +
-        '} while(group'+tokenGroupNumber+' && --loopProtection'+currentAtomIndex+' > 0 && (min'+currentAtomIndex+' < ++count'+currentAtomIndex+' || !max'+currentAtomIndex+' || count'+currentAtomIndex+' < max'+currentAtomIndex+'));\n' +
-        'if (loopProtection'+currentAtomIndex+' <= 0) throw "Loop protection!";\n' +
+      '{ // parseQuantifiers '+currentCounter+':'+tokenGroupNumber+'\n' +
+        'var loopProtection'+currentCounter+' = 10000;\n' +
+        'var min'+currentCounter+' = '+min+';\n' +
+        'var max'+currentCounter+' = '+max+';\n' +
+        'var count'+currentCounter+' = 0;\n' +
+        'var startIndex'+currentCounter+' = index;\n' +
+        'do { // parseQuantifiers '+currentCounter+':'+tokenGroupNumber+'\n' +
+        '  var startIndex'+innerCounter+' = index;\n' +
+          beforeAssignments +
+            parseAssignments(FORCE_PARAMFILL) +
+            ', count'+currentCounter +
+            ', ' + (!!repeatCall) +
+          afterAssignments +
+          // restore index if this group did not match ("backtracking")
+        '  if (!group'+tokenGroupNumber+') index = startIndex'+innerCounter+';\n' +
+        repeatCall +
+        '} while(group'+tokenGroupNumber+' && --loopProtection'+currentCounter+' > 0 && (++count'+currentCounter+' < max'+currentCounter+' || !max'+currentCounter+'));\n' +
+        'if (loopProtection'+currentCounter+' <= 0) throw "Loop protection!";\n' +
         // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
-        'group'+tokenGroupNumber+' = count'+currentAtomIndex+' >= min'+currentAtomIndex+';\n' +
+        'group'+tokenGroupNumber+' = count'+currentCounter+' >= min'+currentCounter+';\n' +
+        'if (!group'+tokenGroupNumber+') index = startIndex'+currentCounter+';\n' +
       '}\n' +
       '';
 
@@ -415,9 +446,10 @@ function parse(rule, hardcoded, macros) {
   }
   function parseNumbers() {
     var s = '';
-    var peek = rule[pos++];
-    while (peek > '0' && peek < '9') {
-
+    var p = rule[pos];
+    while (p >= '0' && p <= '9') {
+      s += p;
+      p = rule[++pos];
     }
     --pos;
     consume();
