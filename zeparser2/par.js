@@ -260,13 +260,21 @@
         ;
     },
     parseStatement: function(inFunction, inLoop, inSwitch, labelSet, optional, freshLabels){
-      if (this.tok.lastType === IDENTIFIER) {
-        this.tok.lastToken.statementStart = true;
+      var tok = this.tok;
+      var start = tok.lastToken;
+      var result;
+      if (tok.lastType === IDENTIFIER) {
         this.parseIdentifierStatement(inFunction, inLoop, inSwitch, labelSet, freshLabels);
-        return PARSEDSOMETHING;
+        result = PARSEDSOMETHING;
+      } else {
+        // can be false for close curly and eof
+        result = this.parseNonIdentifierStatement(inFunction, inLoop, inSwitch, labelSet, optional);
       }
-      // can be false for close curly and eof
-      return this.parseNonIdentifierStatement(inFunction, inLoop, inSwitch, labelSet, optional);
+      if (result === PARSEDSOMETHING) {
+        start.statementStart = true;
+        start.lastStatementToken = tok.prevBlack;
+      }
+      return result;
     },
     parseNonIdentifierStatement: function(inFunction, inLoop, inSwitch, labelSet, optional) {
       var tok = this.tok;
@@ -278,7 +286,7 @@
       }
 
       if (c === ORD_OPEN_CURLY) { // 33.2%
-        this.tok.lastToken.statementStart = true;
+        var start = this.tok.lastToken;
         var curly = tok.lastToken;
         tok.next(EXPR);
         this.parseBlock(NEXTTOKENCANBEREGEX, inFunction, inLoop, inSwitch, labelSet, curly);
@@ -289,17 +297,16 @@
     },
     parseNonIdentifierStatementNonCurly: function(c, optional){
       var tok = this.tok;
+      var start = tok.lastToken;
 
       // relative to this function: punc=96%, string=4%, number=1%, rest 0%
 
       if (c === ORD_OPEN_PAREN) { // 56%
-        this.tok.lastToken.statementStart = true;
         this.parseExpressionStatement();
         return PARSEDSOMETHING;
       }
 
       if (c === ORD_SEMI) { // 26% empty statement
-        this.tok.lastToken.statementStart = true;
         // this shouldnt occur very often, but they still do.
         tok.next(EXPR);
         return PARSEDSOMETHING;
@@ -307,7 +314,6 @@
 
       if (c === ORD_PLUS || c === ORD_MIN) { // 5% 3%
         if (tok.getNum(1) === c || tok.lastLen === 1) {
-          this.tok.lastToken.statementStart = true;
           this.parseExpressionStatement();
           return PARSEDSOMETHING;
         }
@@ -318,14 +324,12 @@
 
       // rare
       if (type === STRING || c === ORD_OPEN_SQUARE) { // 4% 2%
-        this.tok.lastToken.statementStart = true;
         this.parseExpressionStatement();
         return PARSEDSOMETHING;
       }
 
       // almost never
       if (c === ORD_EXCL) { // 2%
-        this.tok.lastToken.statementStart = true;
         if (tok.lastLen === 1) {
           this.parseExpressionStatement();
           return PARSEDSOMETHING;
@@ -335,7 +339,6 @@
 
       // now you're just running tests
       if (type === NUMBER || c === ORD_TILDE || type === REGEX) { // 1% 0% 0%
-        this.tok.lastToken.statementStart = true;
         this.parseExpressionStatement();
         return PARSEDSOMETHING;
       }

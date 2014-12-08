@@ -250,6 +250,8 @@
 
     /** @property {Object} lastToken The last token that was parsed (not consumed). Basically the token currently being evaluated */
     lastToken: null,
+    /** @property {Object} prevBlack The token before this.lastToken, makes it easier to set statement stop */
+    prevBlack: null,
 
     // .charCodeAt(this.lastOffset) cache
     firstTokenChar: 0,
@@ -426,6 +428,7 @@
 
       if (saveTokens) {
         token.black = this.tokenCountBlack++;
+        this.prevBlack = this.lastToken; // for easy statement end
         this.lastToken = token;
         if (options.createBlackStream) {
           this.black.push(token);

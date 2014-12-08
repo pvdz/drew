@@ -2,64 +2,69 @@ module.exports = parse;
 
 // TODO: drop `length` from args object as soon as we encounter one non-int key
 
-function parse(rule, hardcoded, macros) {
-//  console.log('Parsing rule:', [rule]);
+function parse(query, hardcoded, macros) {
+  var DEBUG = true;
 
   var pos = 0;
-  var inputRule = rule;
+  var inputQuery = query;
   var lastAtomStart = 0;
 
   var TOPLEVEL = true;
   var NOT_TOPLEVEL = false;
   var INSIDE_TOKEN = true;
   var OUTSIDE_TOKEN = false;
-  var ALLOW_LEADING_NUMS = true;
 
   var counter = 0;
   var tokenCounter = 0;
-
-  var hasMultiCall = false;
+  var logCounter = 1000;
 
   function white(c) {
     return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\r\n';
   }
 
   function consume() {
-    var c = rule[pos++];
+    var c = query[pos++];
 
-    while (white(rule[pos])) ++pos;
+    while (white(query[pos])) ++pos;
 
     return c;
   }
   function peek(c) {
-    var d = rule[pos];
+    var d = query[pos];
     if (c) return c === d;
     return d;
   }
   function assert(c) {
-    if (c !== rule[pos]) reject('fail, expecting ['+c+'] at ['+pos+'] in ['+rule+'], found ['+rule[pos]+']');
+    if (c !== query[pos]) reject('fail, expecting ['+c+'] at ['+pos+'] in ['+query+'], found ['+query[pos]+']');
     consume();
   }
   function reject(m){
     throw new Error(m);
   }
 
-  function parseRule() {
+  function parseQuery() {
     var currentGroup = counter++;
     var s = 'var group'+currentGroup+' = false;\n';
+    if (DEBUG) s += 'console.group("root start");\n';
     do {
       s += toplevelPart(currentGroup);
 
       if (peek('|')) {
         consume();
-        s += 'if /*parserule*/(!group'+currentGroup+') ';
-      } else if (peek('&')) {
-        consume();
-        s += 'if /*parserule*/(group'+currentGroup+') ';
+        if (DEBUG) s += 'console.groupEnd();\n';
+        if (DEBUG) s += 'console.group("root OR start");\n';
+        if (DEBUG) s += 'if (group'+currentGroup+') console.log("Last part matched, no need to check rest");\n';
+        // previous part did not match so we basically start from scratch
+        s += 'if (!group'+currentGroup+
+          ' && !void(tokensMatched.length = 0)' +
+          ' && !void(callStack.length = 0)' +
+          ' && !void(argStack.length = 0)' +
+        ') ';
       } else {
         break;
       }
     } while(true);
+    if (DEBUG) s += 'console.groupEnd();\n';
 
     return s;
   }
@@ -70,7 +75,7 @@ function parse(rule, hardcoded, macros) {
     var first = true;
     while (atom = parseAtomMaybe(TOPLEVEL, OUTSIDE_TOKEN, currentGroup, first)) {
       if (atom) {
-        if (!first) s += 'if /*toplevelPart*/(group0) ';
+        if (!first) s += 'if (group0) ';
         s += atom + '\n';
         first = false;
       }
@@ -84,7 +89,7 @@ function parse(rule, hardcoded, macros) {
     return s;
   }
 
-  function parseAtomMaybe(top, insideToken, tokenGroupNumber, noCurlies){
+  function parseAtomMaybe(top, insideToken, tokenGroupNumber, noCurlies, invert){
     lastAtomStart = pos;
     var currentCounter = counter++;
 
@@ -96,7 +101,7 @@ function parse(rule, hardcoded, macros) {
       if (insideToken) reject('Trying to parse another token while inside a token');
       if (noCurlies) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for white token [\n';
       beforeQuantifier += '// white token '+currentCounter+':'+(tokenCounter++)+'\n';
-      beforeQuantifier += 'group'+tokenGroupNumber+' = checkToken(symw()' + parseWhiteToken();
+      beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenWhite(symw()' + parseWhiteToken();
 
       afterQuantifier += ');\n';
       if (noCurlies) afterQuantifier += '} // ] '+currentCounter+' for white token\n';
@@ -114,26 +119,38 @@ function parse(rule, hardcoded, macros) {
       result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
     } else if (peek('(')) {
       if (insideToken) {
-        beforeQuantifier += ' && checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
+        beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
 
-        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
+        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter, insideToken);
       } else {
-        beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for token group (\n';
-        beforeQuantifier += '// start group '+currentCounter+'\n';
-        beforeQuantifier += 'var group'+currentCounter+' = false;\n';
-        beforeQuantifier += 'var groupStart'+currentCounter+' = index;\n';
-        beforeQuantifier += 'symgt(); // '+currentCounter+'\n';
+        beforeQuantifier += '{ // parseAtomMaybe ' + currentCounter + ' for token group (\n';
+        beforeQuantifier += '// start group ' + currentCounter + '\n';
+        beforeQuantifier += 'var group' + currentCounter + ' = false;\n';
+        beforeQuantifier += 'var groupStart' + currentCounter + ' = index;\n';
+        beforeQuantifier += 'symgt(); // ' + currentCounter + '\n';
         beforeQuantifier += parseGroup(OUTSIDE_TOKEN, currentCounter);
-        beforeQuantifier += 'checkTokenGroup(group' + currentCounter;
+        beforeQuantifier += 'checkTokenGroup(';
+        beforeQuantifier += 'group' + currentCounter;
+        beforeQuantifier += ', index - groupStart' + currentCounter;
 
         afterQuantifier += ');\n';
-        afterQuantifier += 'if (!group'+currentCounter+') index = groupStart'+currentCounter+';\n';
-        afterQuantifier += 'group'+tokenGroupNumber+' = group'+currentCounter+'\n';
-        afterQuantifier += '// end group '+currentCounter+'\n';
-        afterQuantifier += '} // ) '+currentCounter+' for token group\n';
+        afterQuantifier += 'if (!group' + currentCounter + ') index = groupStart' + currentCounter + ';\n';
+        afterQuantifier += 'group' + tokenGroupNumber + ' = group' + currentCounter + '\n';
+        afterQuantifier += '// end group ' + currentCounter + '\n';
+        afterQuantifier += '} // ) ' + currentCounter + ' for token group\n';
 
+        var ALWAYS_FILL_PARAMS = true;
         result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       }
+    } else if (peek('#')) {
+      if (insideToken) reject('Cannot trigger early callback inside a token');
+
+      var id = parseDesignator();
+      if (!id) id = 0;
+
+      parseColonComment();
+
+      result = 'queueEarlyCall("'+id+'");\n';
     } else {
       return false;
     }
@@ -156,16 +173,17 @@ function parse(rule, hardcoded, macros) {
   function parseGroup(insideToken, tokenGroupIndex) {
     assert('(');
     var s = '';
+    if (!insideToken) s += 'tokensMatchGroupPointers.push(tokensMatched.length);\n';
     var startOfChain = 1;
     while (true) {
       if (peek(')')) break;
       else if (peek('[')) {
         if (insideToken) reject('Trying to parse another token while inside a token');
-        if (!startOfChain) s += 'if /*parsegroup1*/(group'+tokenGroupIndex+') ';
+        if (!startOfChain) s += 'if (group'+tokenGroupIndex+') ';
         s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, startOfChain);
       } else if (peek('{')) {
         if (insideToken) reject('Trying to parse another token while inside a token');
-        if (!startOfChain) s += 'if /*parsegroup2*/(group'+tokenGroupIndex+') ';
+        if (!startOfChain) s += 'if (group'+tokenGroupIndex+') ';
         s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, startOfChain);
       } else if (peek('(')) {
         s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex);
@@ -173,103 +191,127 @@ function parse(rule, hardcoded, macros) {
         consume();
         if (insideToken) reject('Expecting ors to be caught in parseMatchConditions');
         startOfChain = 2; // first is immediately dec'ed, 2 makes sure it survives one loop
-        s += 'if /*parsegroup3*/(!group'+tokenGroupIndex+') ';
+        if (!insideToken) {
+          s += 'if (!group'+tokenGroupIndex+') {\n' +
+            // reset stacks to the start of group state
+            '  tokensMatched.length = tokensMatchGroupPointers[tokensMatchGroupPointers.length-1];\n' +
+            '  callStack.length = callPointers[callPointers.length-1];\n' +
+            '  argStack.length = argPointers[argPointers.length-1];\n' +
+          '}\n';
+        }
+        s += 'if (!group'+tokenGroupIndex+') ';
       } else if (peek('&')) {
         consume();
         if (insideToken) reject('Expecting ands to be caught in parseMatchConditions');
         else reject('No need to put & between tokens (just omit them), only allowed between match conditions');
       } else {
+//        if (!insideToken) s += 'group'+tokenGroupIndex+' = (group'+tokenGroupIndex;
         s += parseMatchConditions(insideToken, tokenGroupIndex);
+//        if (!insideToken) s += ');\n'; // not sure about this...
       }
       if (startOfChain) startOfChain--;
     }
+    if (!insideToken) s += 'if (!group'+tokenGroupIndex+') tokensMatched.length = tokensMatchGroupPointers.pop();\n';
+    if (!insideToken) s += 'else tokensMatchGroupPointers.pop();\n';
 
     assert(')');
     return s;
   }
 
-  function parseMatchConditions(insideToken, tokenGroupIndex){
-    var s = parseMatchParticle(insideToken, tokenGroupIndex);
+  function parseMatchConditions(insideToken, tokenGroupIndex, invert){
+    var s = parseMatchParticle(insideToken, tokenGroupIndex, invert);
     while (peek('|') || peek('&')) {
       var d = consume();
 
-      s = ' && (true' + s + ' ' + d + d + ' true' + parseMatchParticle(insideToken, tokenGroupIndex) + ')';
+      s = ' && (true' + s + ' ' + d + d + ' (true' + parseMatchParticle(insideToken, tokenGroupIndex) + '))';
     }
 
     return s;
   }
 
-  function parseMatchParticle(insideToken, tokenGroupIndex) {
+  function parseMatchParticle(insideToken, tokenGroupIndex, invert) {
+    if (peek('!')) {
+      assert('!');
+      invert = !invert;
+    }
     if (peek('`')) {
       if (!insideToken) reject('Trying to parse a literal while not inside a tag');
-      return parseLiteral();
+      return parseLiteral(invert);
     }
     if (peek('*')) {
       if (!insideToken) reject('Unit test: inconsistent; is this star a quantifier or condition?');
-      return parseStarCondition();
+      return parseStarCondition(invert);
     }
-    if (peek('(')) return parseAtomMaybe(NOT_TOPLEVEL, insideToken);
+    if (peek('(')) {
+      return parseAtomMaybe(NOT_TOPLEVEL, insideToken, undefined, undefined, invert);
+    }
     var peeked = peek();
-    if ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked === '$' || peeked === '_')) return parseSymbol(insideToken, tokenGroupIndex);
-    if (pos >= rule.length) return true;
+    if ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked === '$' || peeked === '_')) {
+      return parseSymbol(insideToken, tokenGroupIndex, invert);
+    }
+    if (pos >= query.length) {
+      return true;
+    }
 
-    reject(new Error('Unexpected state [index='+pos+'][peek='+peek()+'][rule='+rule+']'));
+    reject(new Error('Unexpected state [index='+pos+'][peek='+peek()+'][query='+query+']'));
   }
 
-  function parseLiteral() {
+  function parseLiteral(invert) {
     // take care with consume() in this function; it skips whitespace, even in literals.
     ++pos; // dont consume (skips whites)
     var s = '';
-    while (true) {
+    var protection = 100000;
+    while (--protection > 0) {
       var peeked = peek();
       if (peeked === '`') break;
 
       if (peeked === '\\') {
-        s += rule[pos++];
+        s += query[pos++];
 
-        if (rule[pos+1].toLowerCase() === 'u') {
-          var a = rule[pos+2].toLowerCase();
+        if (query[pos+1].toLowerCase() === 'u') {
+          var a = query[pos+2].toLowerCase();
           if ((a < '0' || a > '9') && (a < 'a' || a > 'f')) reject('Unicode escape must be 0-9a-f, was ['+a+']');
-          var b = rule[pos+3].toLowerCase();
+          var b = query[pos+3].toLowerCase();
           if ((b < '0' || b > '9') && (b < 'a' || b > 'f')) reject('Unicode escape must be 0-9a-f, was ['+b+']');
-          var c = rule[pos+4].toLowerCase();
+          var c = query[pos+4].toLowerCase();
           if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) reject('Unicode escape must be 0-9a-f, was ['+c+']');
-          var d = rule[pos+5].toLowerCase();
+          var d = query[pos+5].toLowerCase();
           if ((d < '0' || d > '9') && (d < 'a' || d > 'f')) reject('Unicode escape must be 0-9a-f, was ['+d+']');
 
           s += 'u'+a+b+c+d;
-        } else if (rule[pos+1].toLowerCase() === 'x') {
-          var a = rule[pos+2].toLowerCase();
+        } else if (query[pos+1].toLowerCase() === 'x') {
+          var a = query[pos+2].toLowerCase();
           if ((a < '0' || a > '9') && (a < 'a' || a > 'f')) reject('Unicode escape must be 0-9a-f, was ['+a+']');
-          var b = rule[pos+3].toLowerCase();
+          var b = query[pos+3].toLowerCase();
           if ((b < '0' || b > '9') && (b < 'a' || b > 'f')) reject('Unicode escape must be 0-9a-f, was ['+b+']');
 
           s += 'x'+a+b;
         } else {
-          s += rule[pos++];
+          s += query[pos++];
         }
       } else {
-        s += rule[pos++];
+        s += query[pos++];
       }
     }
+    if (protection <= 0) {debugger; throw 'loop protection'; }
     assert('`');
 
     var r = s.replace(/'/g, '\\\'');
-    var t = ' && value(\'' + r + '\')';
+    var t = ' && '+(invert?'!':'')+'value(\'' + r + '\')';
 
-    return t;
+    var q = '';
+    if (DEBUG) q = ' && !void console.log("# '+(++logCounter)+' start of literal [`'+ r.replace(/"/g,'\"')+'`] at '+pos+' in query to token "+index+":", token())';
 
-//    return "(console.log(value(), '<->', '"+r+"'), "+t+")";
-
+    return q + t;
   }
 
-  function parseStarCondition() {
+  function parseStarCondition(invert) {
     assert('*');
 
-    return ' && !!token()';
+    return ' && '+(invert?'':'!')+'!token()';
   }
 
-  function parseSymbol(insideToken, tokenGroupIndex) {
+  function parseSymbol(insideToken, tokenGroupIndex, invert) {
     var start = pos;
     var s = consume();
 
@@ -281,8 +323,22 @@ function parse(rule, hardcoded, macros) {
       else break;
     }
 
-    if (hardcoded[s]) return ' && ' + hardcoded[s]; // TOFIX: detect token state and report?
-    if (macros[s]) return injectMacro(macros[s], start, pos, insideToken, tokenGroupIndex);
+    var t = '';
+    if (DEBUG && insideToken) t += ' && !void ';
+    if (DEBUG) t += 'console.log("# '+(++logCounter)+' start of symbol ['+ s.replace(/"/g,'\"')+'] at '+pos+' in query to token "+index+":", token())';
+    if (DEBUG && !insideToken) t += ';\n';
+
+    if (hardcoded[s]) {
+      if (insideToken) t += ' && ';
+      else t += 'if (!group'+tokenGroupIndex+') group1 = ';
+      t += (invert?'!':'') + '('+hardcoded[s]+')';
+      if (DEBUG && !insideToken) t += ';\n';
+      return t;
+    } // TOFIX: detect token state and report?
+    if (macros[s]) {
+      t += injectMacro(macros[s], start, pos, insideToken, tokenGroupIndex, invert);
+      return t;
+    }
 
     reject('Unknown constant: ['+s+']');
   }
@@ -297,19 +353,13 @@ function parse(rule, hardcoded, macros) {
         assignmentString += ', undefined';
       } else {
         assignmentString += parseAssignmentKey();
-        if (peek(':')) {
-          consume();
-          if (!parseIdentifier(ALLOW_LEADING_NUMS)) console.warn('name comment was empty');
-        }
+        parseColonComment();
       }
 
       if (peek() === ',') {
         assert(',');
         assignmentString += parseAssignmentKey();
-        if (peek(':')) {
-          consume();
-          if (!parseIdentifier(ALLOW_LEADING_NUMS)) console.warn('name comment was empty');
-        }
+        parseColonComment();
       } else if (forced) {
         assignmentString += ', undefined';
       }
@@ -319,20 +369,34 @@ function parse(rule, hardcoded, macros) {
 
     return assignmentString;
   }
+  function parseColonComment() {
+    if (peek(':')) {
+      assert(':');
+      var consumed = false;
+      var peeked = peek();
+      // whitespace is done implicitly by consume...
+      while ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_' || peeked === '$' || peeked === '-') {
+        consume();
+        consumed = true;
+        peeked = peek();
+      }
+      if (!consumed) reject('Colon comment must contain at least some comment...');
+    }
+  }
   function parseAssignmentKey() {
-    var name = parseIdentifier(ALLOW_LEADING_NUMS);
+    var name = parseDesignator();
     if (!name) reject('Missing valid var name after equal sign');
     return ', \'' + name + '\'';
   }
-  function parseIdentifier(allowLeadingNums) {
+  function parseDesignator() {
     var name = '';
     while (true) {
-      var peeked = rule[pos];
-      if (peeked && (peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (allowLeadingNums && peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
-        name += rule[pos++];
+      var peeked = query[pos];
+      if (peeked && (peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
+        name += peeked;
+        ++pos;
       }
       else break;
-      allowLeadingNums = true;
     }
     // skip whitespace after name...
     --pos;
@@ -341,22 +405,24 @@ function parse(rule, hardcoded, macros) {
     return name;
   }
 
-  function injectMacro(macro, from, to, insideToken, tokenGroupIndex) {
+  function injectMacro(macro, from, to, insideToken, tokenGroupIndex, invert) {
     // remove lastAtomStart...pos and replace it with macro
     // then reset pos and parse atom again
     var s = '';
 
-    rule = rule.slice(0, from) + macro + rule.slice(to);
+    query = query.slice(0, from) + macro + query.slice(to);
+    if (DEBUG) console.warn('Extrapolated query:', query);
     pos = from;
-
-    if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex);
-    return s + parseMatchConditions(insideToken, tokenGroupIndex);
+    if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, undefined, invert);
+    return s + parseMatchConditions(insideToken, tokenGroupIndex, invert);
   }
 
-  function parseQuantifiers(beforeAssignments, afterAssignments, tokenGroupNumber, currentCounter) {
+  function parseQuantifiers(beforeAssignments, afterAssignments, tokenGroupNumber, currentCounter, insideToken) {
     // [foo] 1
     // [foo] 1...
     // [foo] 1..2
+
+    var FORCE_PARAMFILL = true;
 
     var min = 0;
     var max = 0; // 0=infinite upper bound
@@ -399,22 +465,29 @@ function parse(rule, hardcoded, macros) {
       }
     }
 
-    var repeatCall = false;
+    if (insideToken) {
+      throw 'Parse error: found quantifier for non-token or non-token-group. You can only quantify tokens.';
+    }
+
+    var NORMAL_CALL = 0;
+    var REPEAT_CALL = 1;
+    var COLLECT_CALL = 2;
+
+    var callbackMode = NORMAL_CALL;
 
     // quantifier callback modifiers
     if (peek('@')) {
       assert('@');
       // match for each individual (repeated) match
-      repeatCall = true;
-      hasMultiCall = true;
+      callbackMode = REPEAT_CALL;
     } else if (peek('%')) {
       assert('%');
       // pass on start/end tokens for each match in an array
       // either one array as pairs if only one var assignment
       // or starts in start and stops in stop parameter if two
+      callbackMode = COLLECT_CALL;
     }
 
-    var FORCE_PARAMFILL = true;
     var innerCounter = counter++;
 
     var result =
@@ -428,12 +501,12 @@ function parse(rule, hardcoded, macros) {
         '  var startIndex'+innerCounter+' = index;\n' +
           beforeAssignments +
             parseAssignments(FORCE_PARAMFILL) +
-            ', count'+currentCounter +
-            ', ' + (!!repeatCall) +
+            ', count'+currentCounter+'+1' +
+            ', ' + callbackMode +
+            ', min'+currentCounter +
           afterAssignments +
           // restore index if this group did not match ("backtracking")
         '  if (!group'+tokenGroupNumber+') index = startIndex'+innerCounter+';\n' +
-        repeatCall +
         '} while(group'+tokenGroupNumber+' && --loopProtection'+currentCounter+' > 0 && (++count'+currentCounter+' < max'+currentCounter+' || !max'+currentCounter+'));\n' +
         'if (loopProtection'+currentCounter+' <= 0) throw "Loop protection!";\n' +
         // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
@@ -446,10 +519,10 @@ function parse(rule, hardcoded, macros) {
   }
   function parseNumbers() {
     var s = '';
-    var p = rule[pos];
+    var p = query[pos];
     while (p >= '0' && p <= '9') {
       s += p;
-      p = rule[++pos];
+      p = query[++pos];
     }
     --pos;
     consume();
@@ -457,16 +530,17 @@ function parse(rule, hardcoded, macros) {
     return parseInt(s, 10);
   }
 
-  var code = parseRule();
+  if (DEBUG) console.warn('Parsing query   :', query);
+  var code = parseQuery();
 
   return (
-    'function rule(){\n'+
-    '  // input rule: '+inputRule+'\n' +
-    '  // final rule: '+rule+'\n' +
-//  '  if(index===0)debugger;'+
-    '  // rule start..\n' +
+    'function query(){\n'+
+    '  // input query: '+inputQuery+'\n' +
+    '  // final query: '+query+'\n' +
+//  '  if(index===2)debugger;'+
+    '  // query start..\n' +
        code+'\n' +
-    '  // rule end..\n' +
+    '  // query end..\n' +
 //  '  if(index===0)debugger;'+
     '  return group0;\n' +
     '}\n'

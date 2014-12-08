@@ -11,93 +11,83 @@ var targetTestIndex = -1;
 if (targetTestIndex >= 0) console.warn('only running test', targetTestIndex);
 
 for (var i=0; i<tests.length; ++i) {
-  if (targetTestIndex >= 0 && targetTestIndex !== i) continue;
+  if (targetTestIndex < 0 || targetTestIndex === i) {
+    one(tests[i], i);
+  }
+}
 
-  var test = tests[i];
+function one(testCase, testIndex) {
+  var rule = testCase[0];
+  var input = testCase[1];
+  var expect = testCase[2];
+  var desc = testCase[3];
 
-  var rule = test[0];
-  var input = test[1];
-  var expect = test[2];
-  var desc = test[3];
   var funcCode = undefined;
+  var output = undefined;
 
   try {
     funcCode = parse(rule, constants, macros);
   } catch (e) {
-    console.error('failed rule parse '+i);
-    console.log('- rule: '+rule);
-    console.log('- input: '+input.replace(/\n/g, '\u23CE'));
-    console.log('- expect: '+expect.replace(/\n/g, '\u23CE'));
-//    console.log(funcCode);
-//    console.log(funcCode.replace(/true && /g, ''));
-    console.error(e.stack);
-
-    throw 'permanent error';
+    err('failed rule parse', testIndex, rule, e);
   }
   try {
     Par.parse(funcCode, {saveTokens:true});
   } catch (e) {
-    console.error('zeparser rejected the generated code for test '+i);
-    console.log('- rule: '+rule);
-    console.log('- input: '+input.replace(/\n/g, '\u23CE'));
-    console.log('- expect:'+expect.replace(/\n/g, '\u23CE'));
-    console.log(funcCode);
-    console.log(funcCode.replace(/true && /g, ''));
-    console.error(e.stack || e);
-
-    throw 'permanent error';
+    err('zeparser rejected the generated rule code', testIndex, rule, e, funcCode);
   }
   try {
     var tokens = Par.parse(input, {saveTokens:true});
   } catch (e) {
-    console.error('zeparser rejected the input for test '+i);
-    console.log('- rule: '+rule);
-    console.log('- input: '+input.replace(/\n/g, '\u23CE'));
-    console.log('- expect:'+expect.replace(/\n/g, '\u23CE'));
-    console.log(funcCode);
-    console.log(funcCode.replace(/true && /g, ''));
-    console.error(e.stack || e);
-
-    throw 'permanent error';
+    err('zeparser rejected the initial input', testIndex, rule, e, funcCode, input);
   }
 
-  try {
+  function antiCatch() {
     run(tokens.whites, funcCode, function(){
+      calledback = true;
+
       var args = Array.prototype.slice.call(arguments, 0);
+//      console.log('callback('+args.map(function(t){return t.white;})+')');
+//      console.log('callback('+args+')');
       if (args[0]) args[0].value = '@';
       if (args[1]) args[1].value = '$';
-      for (var i=2; i<args.length; ++i) {
-        args[i].value = '#';
-      }
-    });
-  } catch (e) {
-    console.error('failed run '+i);
-    console.log('- rule: '+rule);
-    console.log('- input: '+input.replace(/\n/g, '\u23CE'));
-    console.log('- expect:'+expect.replace(/\n/g, '\u23CE'));
-    console.log(funcCode);
-    console.log(funcCode.replace(/true && /g, ''));
-    console.error(e.stack);
+      for (var i=2; i<args.length; ++i) args[i].value = '#';
 
-    throw 'permanent error';
+      output = tokens.whites.map(function(t){ return t.value; }).join('');
+    }, 'once');
   }
 
-  var output = tokens.whites.map(function(t){ return t.value; }).join('');
+  var calledback = false;
+  if (false) antiCatch();
+  else try { antiCatch(); } catch (e) { console.log('disable antiCatch to trap error in browser'); err('failed to run', testIndex, rule, e, funcCode, input, expect, output); }
 
-  if (expect !== output) {
-    console.warn('--- test ' + i + ' failed');
-    if (window.document && document.write) document.write('<div style="font-weight: bold;">['+i+'] FAIL: '+rule+' <small style="color:grey;">('+desc+')</small></div>');
+  var failed = expect !== (calledback ? output : input);
+  if (failed) {
+    if (window.document && document.write) document.write('<div style="font-weight: bold;">['+testIndex+'] FAIL: '+rule+' <small style="color:grey;">('+(desc||'no desc')+')</small></div>');
+    console.warn('--- test ' + testIndex + ' failed' + (calledback ? '' : ' (did not trigger callback but expected to)'));
   } else {
-    if (window.document && document.write) document.write('<div>['+i+'] PASS: '+rule+'</div>');
+    if (window.document && document.write) document.write('<div>['+testIndex+'] PASS: '+rule+'</div>');
   }
 
-  if (expect !== output || targetTestIndex >= 0) {
-    console.log('- rule: '+rule);
-    console.log('- input: ', [input.replace(/\n/g, '\u23CE')], '('+input.length+')');
-    console.log('- expect:', [expect.replace(/\n/g, '\u23CE')], '('+expect.length+')');
-    console.log('- output:', [output.replace(/\n/g, '\u23CE')], '('+output.length+')');
-    console.log(funcCode);
-    console.log(funcCode.replace(/true && /g, ''));
-    console.log('');
+  if (failed || targetTestIndex >= 0) {
+    log(rule, funcCode, input, expect, output);
   }
+}
+function err(reason, testIndex, rule, e, funcCode, input, expect, output) {
+  console.error(reason+' [test '+testIndex+']');
+  log(rule, funcCode, input, expect, output);
+  console.error(e.stack || e);
+
+  throw 'permanent error';
+}
+function log(rule, funcCode, input, expect, output) {
+  console.log('- rule: '+rule);
+
+  if (output === undefined) output = '<none>';
+
+  if (input) console.log('- input : %o',input.replace(/\n/g, '\u23CE'));
+  if (expect) console.log('- expect: %o',expect.replace(/\n/g, '\u23CE'));
+  if (output) console.log('- output: %o',output.replace(/\n/g, '\u23CE'));
+
+  if (funcCode) console.log(funcCode);
+//  if (funcCode) console.log(funcCode.replace(/true && /g, ''));
 }
