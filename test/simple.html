@@ -10,17 +10,18 @@
 <script>
   function require(path) {
     switch (path) {
-      case './zeparser2/uni.js': return window;
-      case './zeparser2/tok.js': return window;
-      case './zeparser2/par.js': return window;
-      case './parse': return parse;
-      case './run': return run;
-      case './constants': return constants;
-      case './macros': return macros;
+      case './../lib/zeparser2/uni.js': return window;
+      case './../lib/zeparser2/tok.js': return window;
+      case './../lib/zeparser2/par.js': return window;
+      case './../src/parse': return parse;
+      case './../src/run': return run;
+      case './../src/constants': return constants;
+      case './../src/macros': return macros;
       default: console.warn('fake require: unknown path (not hardcoded) ['+path+']');
     }
   }
   require.isFake = true; // browser detection hack :)
 </script>
 
-<script src="index.js"></script>
+<body>(Console only)
+<script src="simple.js"></script>
