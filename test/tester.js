@@ -1,9 +1,9 @@
-var parse = require('./parse');
-var run = require('./run');
-var Par = require('./zeparser2/par.js').Par;
+var parse = require('./../src/parse');
+var run = require('./../src/run');
+var Par = require('./../lib/zeparser2/par.js').Par;
 
-var constants = require('./constants');
-var macros = require('./macros');
+var constants = require('./../src/constants');
+var macros = require('./../src/macros');
 
 var tests = require('./tests');
 
