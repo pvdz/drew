@@ -2,9 +2,8 @@ module.exports = parse;
 
 // TODO: drop `length` from args object as soon as we encounter one non-int key
 
+var VERBOSE = true;
 function parse(query, hardcoded, macros) {
-  var DEBUG = true;
-
   var pos = 0;
   var inputQuery = query;
   var lastAtomStart = 0;
@@ -13,10 +12,17 @@ function parse(query, hardcoded, macros) {
   var NOT_TOPLEVEL = false;
   var INSIDE_TOKEN = true;
   var OUTSIDE_TOKEN = false;
+  var OPTIONAL = true;
 
   var counter = 0;
   var tokenCounter = 0;
   var logCounter = 1000;
+
+  function LOG(){ if (VERBOSE) console.log.apply(console, arguments); }
+  function WARN(){ if (VERBOSE) console.warn.apply(console, arguments); }
+  function ERROR(){ if (VERBOSE) console.error.apply(console, arguments); }
+  function GROPEN(){ if (VERBOSE) console.group.apply(console, arguments); }
+  function GRCLOSE(){ if (VERBOSE) console.groupEnd.apply(console, arguments); }
 
   function white(c) {
     return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\r\n';
@@ -34,6 +40,11 @@ function parse(query, hardcoded, macros) {
     if (c) return c === d;
     return d;
   }
+  function over(c) {
+    var d = query[pos+1];
+    if (c) return c === d;
+    return d;
+  }
   function assert(c) {
     if (c !== query[pos]) reject('fail, expecting ['+c+'] at ['+pos+'] in ['+query+'], found ['+query[pos]+']');
     consume();
@@ -45,15 +56,21 @@ function parse(query, hardcoded, macros) {
   function parseQuery() {
     var currentGroup = counter++;
     var s = 'var group'+currentGroup+' = false;\n';
-    if (DEBUG) s += 'console.group("root start");\n';
+    s += 'matchedSomething = false;\n';
+    if (VERBOSE) s += 'GROPEN("root start");\n';
+    s += '{\n'; // this way we can close and open a bracket when we encounter a | and dont worry about brackets in result.
     do {
-      s += toplevelPart(currentGroup);
+      s += parseTopLevelAtom(currentGroup);
 
       if (peek('|')) {
         consume();
-        if (DEBUG) s += 'console.groupEnd();\n';
-        if (DEBUG) s += 'console.group("root OR start");\n';
-        if (DEBUG) s += 'if (group'+currentGroup+') console.log("Last part matched, no need to check rest");\n';
+        if (VERBOSE) s += 'GRCLOSE();\n';
+        s += '}\n';
+        s += 'if (group'+currentGroup+') {\n';
+        if (VERBOSE) s += 'LOG("Last part matched, no need to check rest");\n';
+        s += '} else {\n';
+        if (VERBOSE) s += 'GROPEN("root OR start");\n';
+        s += 'matchedSomething = false;\n';
         // previous part did not match so we basically start from scratch
         s += 'if (!group'+currentGroup+
           ' && !void(tokensMatched.length = 0)' +
@@ -64,21 +81,21 @@ function parse(query, hardcoded, macros) {
         break;
       }
     } while(true);
-    if (DEBUG) s += 'console.groupEnd();\n';
+    if (VERBOSE) s += 'GRCLOSE();\n';
+    s += '}\n';
 
     return s;
   }
 
-  function toplevelPart(currentGroup) {
+  function parseTopLevelAtom(currentGroup) {
     var s = '';
     var atom;
     var first = true;
+    var n = 0;
     while (atom = parseAtomMaybe(TOPLEVEL, OUTSIDE_TOKEN, currentGroup, first)) {
-      if (atom) {
-        if (!first) s += 'if (group0) ';
-        s += atom + '\n';
-        first = false;
-      }
+      ++n;
+      s += atom + '\n';
+      first = false;
     }
 
     return s;
@@ -89,46 +106,55 @@ function parse(query, hardcoded, macros) {
     return s;
   }
 
-  function parseAtomMaybe(top, insideToken, tokenGroupNumber, noCurlies, invert){
+  function parseAtomMaybe(top, insideToken, tokenGroupNumber, isTopLevelStart, invert){
     lastAtomStart = pos;
     var currentCounter = counter++;
 
     var beforeQuantifier = '';
     var afterQuantifier = '';
-    var result;
+    var result = '\n//#parseAtomMaybe\n';
+
+    if (!isTopLevelStart && !insideToken) result += 'if (group'+tokenGroupNumber+') // parseAtomMaybe, not first on top level query\n';
 
     if (peek('[')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
-      if (noCurlies) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for white token [\n';
+      if (isTopLevelStart) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for a white token `[`\n';
       beforeQuantifier += '// white token '+currentCounter+':'+(tokenCounter++)+'\n';
       beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenWhite(symw()' + parseWhiteToken();
 
       afterQuantifier += ');\n';
-      if (noCurlies) afterQuantifier += '} // ] '+currentCounter+' for white token\n';
+      if (isTopLevelStart) afterQuantifier += '} // `]` '+currentCounter+' for a white token\n';
 
-      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
+      result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
+      result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
+      result += (insideToken?'':'}\n');
     } else if (peek('{')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
-      if (noCurlies) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for black token {\n';
+      if (isTopLevelStart) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for black token `{`\n';
       beforeQuantifier += '// black token '+currentCounter+':'+(tokenCounter++)+'\n';
       beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenBlack(symb()' + parseBlackToken();
 
       afterQuantifier += ');\n';
-      if (noCurlies) afterQuantifier += '} // } '+currentCounter+' for black token\n';
+      if (isTopLevelStart) afterQuantifier += '} // `}` '+currentCounter+' for black token\n';
 
-      result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
+      result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
+      result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
+      result += (insideToken?'':'}\n');
     } else if (peek('(')) {
       if (insideToken) {
-        beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN) + ')';
+        beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, tokenGroupNumber, false) + ')';
 
-        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter, insideToken);
+        result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
+        result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter, insideToken);
+        result += (insideToken?'':'}\n');
       } else {
-        beforeQuantifier += '{ // parseAtomMaybe ' + currentCounter + ' for token group (\n';
+
+        beforeQuantifier += '{ // parseAtomMaybe ' + currentCounter + ' for a token group `(`\n';
         beforeQuantifier += '// start group ' + currentCounter + '\n';
-        beforeQuantifier += 'var group' + currentCounter + ' = false;\n';
+        beforeQuantifier += 'var group' + currentCounter + ' = true;\n'; // inside a group, init to true
         beforeQuantifier += 'var groupStart' + currentCounter + ' = index;\n';
         beforeQuantifier += 'symgt(); // ' + currentCounter + '\n';
-        beforeQuantifier += parseGroup(OUTSIDE_TOKEN, currentCounter);
+        beforeQuantifier += parseGroup(OUTSIDE_TOKEN, currentCounter, isTopLevelStart);
         beforeQuantifier += 'checkTokenGroup(';
         beforeQuantifier += 'group' + currentCounter;
         beforeQuantifier += ', index - groupStart' + currentCounter;
@@ -137,12 +163,12 @@ function parse(query, hardcoded, macros) {
         afterQuantifier += 'if (!group' + currentCounter + ') index = groupStart' + currentCounter + ';\n';
         afterQuantifier += 'group' + tokenGroupNumber + ' = group' + currentCounter + '\n';
         afterQuantifier += '// end group ' + currentCounter + '\n';
-        afterQuantifier += '} // ) ' + currentCounter + ' for token group\n';
+        afterQuantifier += '} // `)` ' + currentCounter + ' for token group\n';
 
-        var ALWAYS_FILL_PARAMS = true;
-        result = parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
+        result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       }
     } else if (peek('#')) {
+      assert('#');
       if (insideToken) reject('Cannot trigger early callback inside a token');
 
       var id = parseDesignator();
@@ -150,9 +176,100 @@ function parse(query, hardcoded, macros) {
 
       parseColonComment();
 
-      result = 'queueEarlyCall("'+id+'");\n';
+      result = 'queueEarlyCall("' + id + '");\n';
     } else {
+
+      // at this point it must be a top level ^ ^^ $ $$ or ~, or nothing.
+      var r = parseLineStuff(insideToken, tokenGroupNumber, OPTIONAL);
+      return r ? result + r : r;
+    }
+
+    result += '// parseAtomMaybe end\n';
+    return result;
+  }
+
+  function parseLineStuff(insideToken, tokenGroupNumber, optional) {
+    var result = '';
+
+    if (peek('~')) {
+      assert('~');
+      if (insideToken) reject('Tilde (~) only allowed outside of tokens');
+
+      result +=
+        '{\n'+
+        '  '+
+        // note: before matching anything we wont seek and prevent the whole query preemptively
+        '// dont seek for leading ~, just wait for a non-spacy token\n'+
+        'if (' +
+        'GROPEN("~ seek"),'+
+        'LOG("~ seek() past spaces and tabs at all?", "matchedSomething=", matchedSomething, "start=", index),'+
+        'matchedSomething) {\n' +
+          '  '+
+          'if (isSpaceTabComment()) {\n'+
+            '    '+
+            'LOG("~ skipping spaces and tabs");\n'+
+            '    '+
+            'do LOG("skipping", tokens[index]),++index;\n' +
+            '    '+
+            'while (isSpaceTabComment());'+
+            ' // ~' +
+            '\n'+
+          '  '+
+          '}\n'+
+          '  ' +
+          'LOG(group'+tokenGroupNumber+'?"~ passed":"~ failed", "index="+index);\n'+
+          'GRCLOSE();\n'+
+        '}\n'+
+        'else GRCLOSE();\n' +
+        'group'+tokenGroupNumber+' = true; // the ~ seek passes regardless, there is no valid condition for failing\n'+
+        '}\n'+
+      '';
+    } else if (peek('^')) {
+      // start of line, or start of file if another ^ follows
+      if (insideToken) reject('Caret (^) only allowed outside of tokens');
+      result += '{\n';
+      result += 'GROPEN("^ or ^^");\n';
+      if (over('^')) { // no space between
+        assert('^');
+        assert('^');
+        result += 'LOG("^^ start of file?", !index);';
+        result += 'group' + tokenGroupNumber + ' = !index;';
+        result += ' // ^^\n';
+      } else {
+        assert('^');
+        result += 'LOG("^ start of line?", !index, index && isNewline(-1), "->", !index || isNewline(-1));\n';
+        result += 'group' + tokenGroupNumber + ' = (!index || isNewline(-1));';
+        result += ' // ^\n';
+      }
+      result += '(matchedSomething = true);\n';
+      result += 'GRCLOSE();\n';
+      result += '}\n';
+    } else if (peek('$')) {
+      // end of line, or end of file if another $ follows
+      if (insideToken) reject('Dollar ($) only allowed outside of tokens');
+      result += '{\n';
+      result += 'GROPEN("$ or $$");\n';
+      if (over('$')) { // no space between
+        assert('$');
+        assert('$');
+        result += 'LOG(tokens[index]);\n';
+        result += 'LOG("$$ end of file?", index, ">=", tokens.length-1, "->", index >= tokens.length-1);\n';
+        // TOFIX: we need to improve the EOF check. this will crap out generically
+        result += 'group' + tokenGroupNumber + ' = index >= tokens.length-1;';
+        result += ' // $$\n'
+      } else {
+        assert('$');
+        result += 'LOG("$ end of line?", "eol=", index < tokens.length-1 && isNewline(0), "eof=", index >= tokens.length-1);\n';
+        result += '(group' + tokenGroupNumber + ' = (index >= tokens.length-1 || isNewline(0)));';
+        result += ' // $\n';
+      }
+      result += '(matchedSomething = true);\n';
+      result += 'GRCLOSE();\n';
+      result += '}\n';
+    } else if (optional) {
       return false;
+    } else {
+      throw 'unable to parse line stuff, and it is not optional';
     }
 
     return result;
@@ -170,49 +287,86 @@ function parse(query, hardcoded, macros) {
     assert('}');
     return s;
   }
-  function parseGroup(insideToken, tokenGroupIndex) {
+  function parseGroup(insideToken, tokenGroupIndex, first) {
     assert('(');
     var s = '';
-    if (!insideToken) s += 'tokensMatchGroupPointers.push(tokensMatched.length);\n';
+    s += '// parseGroup, first='+first+'\n';
+    if (!insideToken) {
+      s += '{\n'; // for the |
+      s += 'group' + tokenGroupIndex + ' = true;\n'; // init to true for group
+      s += 'tokensMatchGroupPointers.push(tokensMatched.length); // parseGroup; store pointer to current matches so we can drop new matches in case the group fails\n';
+    }
     var startOfChain = 1;
+    var noLongerFirst = first; // "pointer" so we can reset to initial value when we encounter a pipe...
     while (true) {
       if (peek(')')) break;
       else if (peek('[')) {
         if (insideToken) reject('Trying to parse another token while inside a token');
-        if (!startOfChain) s += 'if (group'+tokenGroupIndex+') ';
-        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, startOfChain);
+        if (!startOfChain) s += 'if (group'+tokenGroupIndex+')\n';
+        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, noLongerFirst);
+        noLongerFirst = false;
       } else if (peek('{')) {
         if (insideToken) reject('Trying to parse another token while inside a token');
-        if (!startOfChain) s += 'if (group'+tokenGroupIndex+') ';
-        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, startOfChain);
+        if (!startOfChain) s += 'if (group'+tokenGroupIndex+')\n';
+        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, noLongerFirst);
+        noLongerFirst = false;
       } else if (peek('(')) {
-        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex);
+        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, noLongerFirst);
+        noLongerFirst = false;
       } else if (peek('|')) {
-        consume();
+        noLongerFirst = first; // reset to what it was at the call
+        assert('|');
         if (insideToken) reject('Expecting ors to be caught in parseMatchConditions');
         startOfChain = 2; // first is immediately dec'ed, 2 makes sure it survives one loop
-        if (!insideToken) {
-          s += 'if (!group'+tokenGroupIndex+') {\n' +
-            // reset stacks to the start of group state
-            '  tokensMatched.length = tokensMatchGroupPointers[tokensMatchGroupPointers.length-1];\n' +
-            '  callStack.length = callPointers[callPointers.length-1];\n' +
-            '  argStack.length = argPointers[argPointers.length-1];\n' +
-          '}\n';
-        }
-        s += 'if (!group'+tokenGroupIndex+') ';
+        s +=
+          'GRCLOSE();\n'+
+          '}\n'+
+          'GROPEN("grouped OR");\n'+
+          'if (group'+tokenGroupIndex+') {\n' +
+            'LOG("group'+tokenGroupIndex+' passed, skipping OR");\n'+
+            'GRCLOSE();\n'+
+          '} else {\n'+
+          // reset stacks to the start of group state
+          '  tokensMatched.length = tokensMatchGroupPointers[tokensMatchGroupPointers.length-1];\n' +
+          '  callStack.length = callPointers[callPointers.length-1];\n' +
+          '  argStack.length = argPointers[argPointers.length-1];\n' +
+          '  group'+tokenGroupIndex+' = true; // init to true because inside a group\n'+
+        '';
+      } else if (peek('#')) {
+        assert('#');
+        if (insideToken) reject('Cannot trigger early callback inside a token');
+
+        var id = parseDesignator();
+        if (!id) id = 0;
+
+        parseColonComment();
+
+        s += 'queueEarlyCall("' + id + '");\n';
       } else if (peek('&')) {
-        consume();
+        assert('&');
         if (insideToken) reject('Expecting ands to be caught in parseMatchConditions');
         else reject('No need to put & between tokens (just omit them), only allowed between match conditions');
       } else {
-//        if (!insideToken) s += 'group'+tokenGroupIndex+' = (group'+tokenGroupIndex;
-        s += parseMatchConditions(insideToken, tokenGroupIndex);
-//        if (!insideToken) s += ');\n'; // not sure about this...
+
+        var linestuff = parseLineStuff(insideToken, tokenGroupIndex, OPTIONAL)
+
+        if (linestuff) {
+          s += linestuff;
+          noLongerFirst = false;
+        } else {
+          s += parseMatchConditions(insideToken, tokenGroupIndex);
+          noLongerFirst = false; // ?
+        }
       }
       if (startOfChain) startOfChain--;
     }
-    if (!insideToken) s += 'if (!group'+tokenGroupIndex+') tokensMatched.length = tokensMatchGroupPointers.pop();\n';
-    if (!insideToken) s += 'else tokensMatchGroupPointers.pop();\n';
+    if (!insideToken) {
+      s +=
+        'if (!group'+tokenGroupIndex+') tokensMatched.length = tokensMatchGroupPointers.pop();\n'+
+        'else tokensMatchGroupPointers.pop();\n'+
+        '}\n'+
+      '';
+    }
 
     assert(')');
     return s;
@@ -300,7 +454,7 @@ function parse(query, hardcoded, macros) {
     var t = ' && '+(invert?'!':'')+'value(\'' + r + '\')';
 
     var q = '';
-    if (DEBUG) q = ' && !void console.log("# '+(++logCounter)+' start of literal [`'+ r.replace(/"/g,'\"')+'`] at '+pos+' in query to token "+index+":", token())';
+    if (VERBOSE) q = ' && !void LOG("# '+(++logCounter)+' start of literal [`'+ r.replace(/"/g,'\"')+'`] at '+pos+' in query to token "+index+":", token())';
 
     return q + t;
   }
@@ -324,15 +478,15 @@ function parse(query, hardcoded, macros) {
     }
 
     var t = '';
-    if (DEBUG && insideToken) t += ' && !void ';
-    if (DEBUG) t += 'console.log("# '+(++logCounter)+' start of symbol ['+ s.replace(/"/g,'\"')+'] at '+pos+' in query to token "+index+":", token())';
-    if (DEBUG && !insideToken) t += ';\n';
+    if (VERBOSE && insideToken) t += ' && !void ';
+    if (VERBOSE) t += 'LOG("# '+(++logCounter)+' start of symbol ['+ s.replace(/"/g,'\"')+'] at '+pos+' in query to token "+index+":", token())';
+    if (VERBOSE && !insideToken) t += ';\n';
 
     if (hardcoded[s]) {
       if (insideToken) t += ' && ';
       else t += 'if (!group'+tokenGroupIndex+') group1 = ';
       t += (invert?'!':'') + '('+hardcoded[s]+')';
-      if (DEBUG && !insideToken) t += ';\n';
+      if (VERBOSE && !insideToken) t += ';\n';
       return t;
     } // TOFIX: detect token state and report?
     if (macros[s]) {
@@ -411,7 +565,7 @@ function parse(query, hardcoded, macros) {
     var s = '';
 
     query = query.slice(0, from) + macro + query.slice(to);
-    if (DEBUG) console.warn('Extrapolated query:', query);
+    if (VERBOSE) WARN('Extrapolated query:', query);
     pos = from;
     if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, undefined, invert);
     return s + parseMatchConditions(insideToken, tokenGroupIndex, invert);
@@ -530,7 +684,7 @@ function parse(query, hardcoded, macros) {
     return parseInt(s, 10);
   }
 
-  if (DEBUG) console.warn('Parsing query   :', query);
+  if (VERBOSE) WARN('Parsing query   :', query);
   var code = parseQuery();
 
   return (

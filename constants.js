@@ -2,7 +2,7 @@
 // all constants are wrapped in parens, so dont worry about that. (or do)
 
 var constants = module.exports = {
-  // tokens (as governed by zeparser)
+  // token type name vars (as governed and exposed by zeparser)
   STRING: 'type(STRING)',
   NUMBER: 'type(NUMBER)',
   REGEX: 'type(REGEX)',
@@ -16,10 +16,6 @@ var constants = module.exports = {
 
   // custom hacks
   NEWLINE: 'isNewline(0)',
-  STARTOFLINE: '!index || isNewline(-1)',
-  ENDOFLINE: 'token(index+1).type === EOF || isNewline(1)',
-  STARTOFFILE: '!index',
-  ENDOFFILE: 'token(index-1).type === EOF',
 
   STATEMENT_START: 'token().statementStart',
   STATEMENT: 'token().statementStart && (index = token().lastStatementToken.white)',

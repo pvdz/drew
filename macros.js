@@ -12,12 +12,6 @@ var macros = module.exports = {
   PS: '`\\u2028`',
   LS: '`\\u2029`',
 
-  // alias
-  SOF: 'STARTOFFILE',
-  EOF: 'ENDOFFILE',
-  SOL: 'STARTOFLINE',
-  EOL: 'ENDOFLINE',
-
   COMMA: '`,`',
   PLUS: '`+`',
   MIN: '`-`',

@@ -12,7 +12,8 @@ Drew is a DSL designed to make rewriting easier. It's main source inspiration ar
 # Language CFG
 
 atoms: `atom` | `atom | atoms`
-atom: 'white-token | black-token | token-group | early-call | condition-group
+atom: 'white-token | black-token | token-group | early-call | condition-group | line-atom
+line-atom: `'^^'` | `'^'` | `'$'` | `'$$'` | `'~'`
 white-token: `'[' conditions ']' [quantifier] [assignment]`
 black-token: `'{' conditions '}' [quantifier] [assignment]`
 token-group: `(atom)` | `(atom | atoms)`
@@ -48,14 +49,26 @@ These always go inside a token wrapper (`[]` or `{}`)
 - `*` = assert any one token. do not apply any other matching criteria (could be used together with other conditions, but why would you). Used to skip one token unconditionally.
 - `!` = negate the next matching condition or group: `[!SPACE]` (you dont need peek, you can add multiple conditions for the same token with `&` and `|`). Only inside tokens.
 
-# Matching criteria outside token
+# Seeking past spaces, tabs, and comments
 
-While uncommon there are a few cases where you may want to do a matching criteria without being explicit about the token, and in fact where you don't want to move the token pointer at all.
-Once such case is matching the start of the file (`SOF`) or line (`SOL`). These are hardcoded constants which check certain conditions but you may not want their match to consume a token in your query.
-In such cases you can just wrap them in a group on the token level. A match will count towards matching the entire query, but not move the token pointer.
-The behavior of using a quantifier on such groups is _undefined_. 
+Outside a token context you can use `~` to seek up to the next black token or newline. This will keep consuming whitespace until the current token is black or a newline. This will not consume anything if the current token is already black, a newline, the first token of input, or EOF.
 
-- `(SOL)[SPACE|TAB]*` Match all spaces and tabs at the start of a line. This would be much harder if you had to put `SOL` inside a token wrapper.
+While not required to be used in conjunction, this is available to use `^` and `$` because other mechanisms would consume the token. But beware that `{A}` is not exactly the same as `~[A]`; the tilde (`~`) will stop seeking after the first newline and won't seek at the start of input. The curly brackets do continue to seek in those cases.
+
+_In Regex terms, this is similar to skipping as long as the current token matches `/[ \t]/`._
+
+# Start or end of line or file
+
+This is the `line-atom` rule. These special tokens (no wrapper allowed) are used to match the start or end of a line or file.
+
+- `^`: Match start of line or file. Checks whether previous token is a newline or has index 0.
+- `^^`: Match start of file. Checks whether current token has index 0
+- `$`: Match end of line or file. Checks whether next token is a newline or is EOF.
+- `$$`: Match end of file. Checks whether next token is EOF.
+
+Obviously the symbols are chosen to match regular expressions. The first four will not consume the token they match. 
+
+None of these influence the start or end index of a match directly (in particular when used at the start or end of a query).
 
 # Literal escaping
 
@@ -95,6 +108,8 @@ Operator precedence of `!` is over the first next condition or group. Use a grou
 - `[!X | Y]` means a token that's not X or that is Y
 - `[!(X | Y)]` means a token that's not X nor Y
 
+The line ops `^` `^^` `$` `$$` and `~` have the same precedence as regular tokens (`[x]` and `{x}`).
+
 # Colon-comments
 
 In this spec, a colon-comment is a colon followed by alpha-numeric characters, dashes, underscores, (dollar signs ?? TBD), and whitespace until the first character that doesn't match this criteria.
@@ -105,12 +120,7 @@ It is only used in places where a comment makes sense and cannot lead to ambigui
 # Designators
 
 In this spec, an designator is a regular identifier in JS extended by the possibility to start with a number as well (TBD: and maybe dashes). There's no syntactical situation where this leads to ambiguity.
-It is used to define callback arguments and callback names. 
-
-- `foo`
-- `15`
-- `1foo`
-- `1_foo`
+They are used to define callback arguments and callback names. They bind to the closest group or single atom only. 
 
 # Quantifiers
 
@@ -176,6 +186,8 @@ The assignment starts with an equal sign (`=`).
  - `[X][Y][EXPRESSION]=1{Z}=,2` -> `func(X, EXPRESSION, Z)`
  - `[X] [Y] [EXPRESSION]=expr_start {Z}=2_doo` -> `func({0:X, expr_start:EXPRESSION, '2_doo':Z})`
 
+Duplicate declarations override their previous declarations. Only parts of a query that are part of the match are eligble to declare or override anything. Parts that don't contribute to the match (due to back tracking) will not declare nor clobber anything.
+
 ## Overriding
 
 You can use the same designator multiple times in the same query. The last seen value for a certain designator before a callback is queued will be the one that will be passed on to it.
@@ -226,10 +238,11 @@ You can access "invalid" identifiers with dynamic properties: `obj['0_foo']`
 
 It's possible to trigger a callback multiple times, even from mid-way a query. All callbacks are queued while applying the rule. Only when the rule passes entirely will all individual callbacks be triggered in the order they were queued.
 Can appear anywhere where a token may start. They can have an optional designator and optional colon-comment.
+You can't use this to get a callback on a partial match since stuff is queued lazily and discarded when the match turns out to fail.
 
 ## Multiple calls
 
-To trigger an early callback simply add a pound sign. This is like saying "queue up a callback at this position with the current assignments and clear the assignments after the call".
+To trigger an "early callback" simply add a pound sign. This is like saying "queue up a callback at this position with the current assignments and clear the assignments after the call".
 You cannot prevent the last implicit call of a match. If you're looking to prevent it you should look into rewriting your query instead.
 If the query has an explicit call at the end of the query it will replace the implicit query, though.
 
@@ -248,7 +261,7 @@ Note that this also affects the last implicit callback
 - `[X]=1,2#[Y]=3` => The callback is first called with three parameters (start, first x, last x), and then again with two parameters and two empty places (start, _, _, first y)
 - `[X]=1,2#[Y]=1` => This differs from regular callbacks (`[X]=1,2[Y]=1`) in that the third parameter (`2`) is not passed on for the second call.
 
-## Handler designators
+## Handler names
 
 You can use designators after each pound to identify which callback to call.
 You can use this to have multiple handlers of different parts of the query
@@ -289,9 +302,6 @@ them without putting at least `&` or `|` between them.)
 Hardcoded macros that translate to code directly.
 For debugging; constants are not extrapolated until the actual code generation phase. This is why you'll see the constants left untranslated in the "final" query.
 Constants will always be wrapped in parenthesis when extrapolating. This prevents issues when looking at constants as a unit during declaration time.
-
-- `(SOF)` -> `if (SOF) ...` -> `if (!!index()) ...`
-- `SOL: '!!index() || newlined(-1)'` when used in `[SOL & SPACE]` becomes something like `if ((!!index() || newlined(-1)) && value(' ')) ...`, note the extra wrap for SOL.
 
 # Examples (TBD)
 
@@ -371,8 +381,6 @@ if (token().functionHeaderStart || token().statementHeaderStart) {
 		}
 	}
 }
-
-
 
 
 ```
