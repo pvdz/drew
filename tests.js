@@ -1,4 +1,5 @@
-// note: callback args get: 0=@, 1=$, 2... = #
+// this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
+// so callback args get: 0=@, 1=$, 2... = #
 // note: tests are called in `once` mode, meaning they'll exit after the first match
 var tests = module.exports = [
   [
@@ -12,20 +13,251 @@ var tests = module.exports = [
     'var@a\t= 20;'
   ],
   [
-    '[SOL & `a`]',
-    'a;\nb;',
-    '@;\nb;'
-  ],
-  [
-    '[SOL & `b`]',
-    'a;\nb;',
-    'a;\n@;'
-  ],
-  [
     '[SPACE][COMMA][SPACE]',
     '1,  1  ,1  ,  1',
     '1,  1  ,1 @,  1',
   ],
+
+  [
+    '^[`b`]',
+    'a;\nb;',
+    'a;\n@;',
+    '^ means last consumed black or white token should be newline or start of input'
+  ],
+  [
+    '[NEWLINE]^[`b`]',
+    'a;\nb;',
+    'a;@b;',
+    '^ should not consume a token'
+  ],
+  [
+    '^[`a`]',
+    'a;\nb;',
+    '@;\nb;',
+    '^ means last consumed black or white token should be newline or start of input'
+  ],
+  [
+    '^^[`a`]',
+    'a;\nb;',
+    '@;\nb;',
+    '^^ passes if we have not yet consumed a token'
+  ],
+  [
+    '^^[`b`]',
+    'a;\nb;',
+    'a;\nb;',
+    '^^ passes if we have not yet consumed a token'
+  ],
+  [
+    '~^[`b`]',
+    'a;\n  b;',
+    'a;\n  b;',
+    '~ means consume white tokens until current is black. then check for ^. since prev token will not be newline the query fails.'
+  ],
+  [
+    '~[`a`]|~[`b`]',
+    '  a;  b;',
+    '  @;  b;',
+    // the ~ wont seek at all when at the start of input
+    // the ~ wont seek when it's the start of the query (effectively a noop)
+    // the runner applies the query starting at every index so at index 2, the ~ is ignored and `a` is found; a match
+    'matches a when applying the rule starting at index 2 (!)'
+  ],
+  [
+    '[`x`][`;`]~[`a`]|~[`b`]',
+    'x;  a;  b;',
+    '@;  a;  b;',
+    'same as before but with leading stuff to force ~ to seek'
+  ],
+  [
+    '(~[`a`]|~[`b`])*',
+    '  a;  b;',
+    '@ a;  b;',
+    'equivalent to matching nothing (so anything works)'
+  ],
+  [
+    '(~[`a`]|~[`b`])+',
+    '  a;  b;',
+    '  @;  b;',
+    'reset ~ after match, grouped repeat (tbd, match should start at [a])'
+  ],
+  [
+    '((~[`a`])|(~[`b`]))|(~[`c`])',
+    '  a;  b;  c;',
+    '  @;  b;  c;',
+    'reset ~ after match, with groups, dangerously required disambiguation'
+  ],
+  [
+    '(((~[`a`])|(~[`b`]))|(~[`c`]))*',
+    '  a;  b;  c;',
+    '@ a;  b;  c;',
+    'matches empty string'
+  ],
+  [
+    '(((~[`a`])|(~[`b`]))|(~[`c`]))+',
+    '  a;  b;  c;',
+    '  @;  b;  c;',
+    'reset ~ after match, with groups, dangerously required disambiguation, grouped repeat (tbd, match should start at [a])'
+  ],
+  [
+    '(~[`a`]|~[`b`])|~[`c`]',
+    '  a;  b;  c;',
+    '  @;  b;  c;',
+    'reset ~ after match, with groups'
+  ],
+  [
+    '((~[`a`]|~[`b`])|~[`c`])*',
+    '  a;  b;  c;',
+    '@ a;  b;  c;',
+    'matches empty string'
+  ],
+  [
+    '((~[`a`]|~[`b`])|~[`c`])+',
+    '  a;  b;  c;',
+    '  @;  b;  c;',
+    'reset ~ after match, with groups, grouped repeat'
+  ],
+  [
+    '~[`a`]|(~[`b`]|~[`c`])',
+    '  a;  b;  c;',
+    '  @;  b;  c;',
+    'reset ~ after match, with groups swapped'
+  ],
+  [
+    '(~[`a`]|(~[`b`]|~[`c`]))*',
+    '  a;  b;  c;',
+    '@ a;  b;  c;',
+    'matches empty string'
+  ],
+  [
+    '(~[`a`]|(~[`b`]|~[`c`]))+',
+    '  a;  b;  c;',
+    '  @;  b;  c;',
+    'reset ~ after match, with groups swapped, grouped repeat'
+  ],
+  [
+    '{`b`}',
+    'a;\n  b;',
+    'a;\n  @;',
+    '~[x] is equal to {x}'
+  ],
+  [
+    '^{`b`}',
+    'a;\n  b;',
+    'a;\n  @;',
+    '~[x] is equal to {x}'
+  ],
+  [
+    '^~[`b`]',
+    'a;\n  b;',
+    'a;\n  @;',
+    '~[x] is equal to {x}'
+  ],
+  [
+    '{`a`}',
+    '  a;\n  b;',
+    '  @;\n  b;',
+    '~[x] is equal to {x}'
+  ],
+  [
+    '^{`a`}',
+    '  a;\n  b;',
+    '  @;\n  b;',
+    '~[x] is equal to {x}'
+  ],
+  [
+    '^~[`b`]',
+    '  a;\n  b;',
+    '  a;\n  @;',
+    '~[x] is equal to {x}'
+  ],
+  [
+    '[`;`]~[NEWLINE]^~[`b`]',
+    'a;\n  b;',
+    'a@\n  b;',
+    'the first ~ should "consume" nothing because of an immediate newline. this example exposes an ugly artifact'
+  ],
+  [
+    '~^{`a`}',
+    '  a;\nb;',
+    '  @;\nb;',
+    '~ means consume any space/tab/comment. then check for ^'
+  ],
+  [
+    '~^^~[`a`]',
+    ' a;\nb;',
+    ' @;\nb;',
+    '~ is a noop if at start of query'
+  ],
+  [
+    '~^^[`b`]',
+    '  a;\nb;',
+    '  a;\nb;',
+    '~ means consume white tokens until current is black. then check for ^^'
+  ],
+
+  [
+    '[`a`][`;`]$',
+    'a;\nb;',
+    '@;\nb;',
+    'next black or white should be a newline or EOF'
+  ],
+  [
+    '[`a`]$[NEWLINE]',
+    'a\nb;',
+    '@\nb;',
+    '$ should not consume a token'
+  ],
+  [
+    '[`b`][`;`]$',
+    'a;\nb;',
+    'a;\n@;',
+    'next black or white should be a newline or EOF'
+  ],
+  [
+    '[`a`][`;`]$$',
+    'a;\nb;',
+    'a;\nb;',
+    'next black or white should be EOF'
+  ],
+  [
+    '[`b`][`;`]$$',
+    'a;\nb;',
+    'a;\n@;',
+    'next black or white should be EOF'
+  ],
+
+  [
+    '[`a`][`;`]~$',
+    'a;\nb;',
+    '@;\nb;',
+    '~ means consume white tokens until current is black. then check for $'
+  ],
+  [
+    '[`a`]$[NEWLINE]~[`b`]',
+    'a\n  b;',
+    '@\n  b;',
+    '~ should consume the whitespace'
+  ],
+  [
+    '[`b`][`;`]~$',
+    'a;\nb;',
+    'a;\n@;',
+    '~ means consume white tokens until current is black. then check for $'
+  ],
+  [
+    '[`a`][`;`]~$$',
+    'a;\nb;',
+    'a;\nb;',
+    '~ means consume white tokens until current is black. then check for $$'
+  ],
+  [
+    '[`b`][`;`]~$$',
+    'a;\nb;',
+    'a;\n@;',
+    '~ means consume white tokens until current is black. then check for $$'
+  ],
+
 
   [
     '{VAR}',
@@ -719,40 +951,40 @@ var tests = module.exports = [
   ],
 
   [
-    '([SOL & WHITE]?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
+    '((^[WHITE])?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
     'function foo() {}',
     '@ #() {}',
-    'regression: SOL&WHITE on SOF should not match function (the @ is default 0 arg, a match would make that $)'
+    'regression: ^WHITE on $ should not match function (the @ is default 0 arg, a match would make that $)'
   ],
   [
-    '([SOL & WHITE]?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
+    '((^[WHITE])?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
     'var bar = function foo() {}',
     'var bar =$function #() {}',
     'the reason the query is flawed'
   ],
   [
-    '(([SOL & WHITE][WHITE]*)=0,1|([NEWLINE][WHITE]*=0,1)) [FUNCTION]{IDENTIFIER}=2',
+    '(((^[WHITE])[WHITE]*)=0,1|([NEWLINE][WHITE]*=0,1)) [FUNCTION]{IDENTIFIER}=2',
     'var bar = function foo() {}',
     'var bar = function foo() {}',
     'the right way to do this query (no match)'
   ],
   [
-    '(([SOL & WHITE][WHITE]*)=0,1|([NEWLINE][WHITE]*=0,1)) [FUNCTION]{IDENTIFIER}=2',
+    '(((^[WHITE])[WHITE]*)=0,1|([NEWLINE][WHITE]*=0,1)) [FUNCTION]{IDENTIFIER}=2',
     '   function foo() {}',
     '@ $function #() {}',
     'the right way to do this query 2 (sof)'
   ],
   [
-    '(([SOL & WHITE][WHITE]*)=0,1|([NEWLINE][WHITE]*=0,1)) [FUNCTION]{IDENTIFIER}=2',
+    '(((^[WHITE])[WHITE]*)=0,1|([NEWLINE][WHITE]*=0,1)) [FUNCTION]{IDENTIFIER}=2',
     'foo();\n   function foo() {}',
     'foo();\n@ $function #() {}',
     'the right way to do this query 3 (newline)'
   ],
   [
-    '([SOL & WHITE]?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
+    '((^[WHITE])?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
     'foo();\nfunction foo() {}',
     'foo();$function #() {}',
-    'SOL&WHITE should match the newline'
+    '^WHITE should match the newline' // TOFIX ^
   ],
   [
     '{IDENTIFIER}[SPACE]?=1,2',
@@ -797,16 +1029,16 @@ var tests = module.exports = [
     'whitespace optional so matches identifier, no assignments so first token becomes @'
   ],
   [
-    '([SOL & WHITE][WHITE]*)?=0,1 {FUNCTION}',
+    '((^[WHITE])[WHITE]*)?=0,1 {FUNCTION}',
     'foo;\nfunction foo() {}',
     'foo;\n@ foo() {}',
-    'arg assignment without a match: the SOL should not match anything. 0 should be `function` and 1 should be undefined'
+    'arg assignment without a match: the ^ should not match anything. 0 should be `function` and 1 should be undefined'
   ],
   [
-    '([SOL & WHITE][WHITE]*)?=0,1 {FUNCTION}{IDENTIFIER}=2',
+    '((^[WHITE])[WHITE]*)?=0,1 {FUNCTION}{IDENTIFIER}=2',
     'foo;\nfunction foo() {}',
     'foo;\n@ #() {}',
-    'regression: SOL&WHITE on newline should not match function'
+    'regression: ^WHITE on newline should not match function' // TOFIX: ^
   ],
 
   [
@@ -817,23 +1049,68 @@ var tests = module.exports = [
   ],
 
   [
-    '(STARTOFFILE)[`x`]',
+    '^^[`x`]',
     'x();\nx();',
     '@();\nx();',
     'constant outside token'
   ],
   [
-    '(SOF)[`x`]',
+    '^^[`x`]',
     'x();\nx();',
     '@();\nx();',
     'macro outside token'
   ],
   [
-    '(SOL)([`x`][PAREN_PAIR][SEMI][WHITE]*)2',
+    '^([`x`][PAREN_PAIR][SEMI][WHITE]*)2',
     'x();\nx();',
     '@();\nx();',
-    'top-level group for SOL (and SOF) should work as expected without consuming a token'
+    'top-level group for ^ (and ^^) should work as expected without consuming a token'
   ],
+
+  [
+    '{PLUS} # {MIN}',
+    '+ - 1;',
+    '@ @ 1;',
+    'early call'
+  ],
+  [
+    '{PLUS} {PLUS} {PLUS} # {MIN} {MIN} {MIN}',
+    '+ + + - - - 1;',
+    '@ + + @ - - 1;',
+    'early call 2'
+  ],
+  [
+    '{PLUS} {PLUS} {PLUS} # {`x`} {MIN}=0 {MIN} {MIN}',
+    '+ + + x - - - 1;',
+    '@ + + x @ - - 1;',
+    'early call put x in the middle'
+  ],
+  [
+    '({PLUS} {PLUS} {PLUS})=0,1 # ({MIN} {MIN} {MIN})=0,1',
+    '+ + + - - - 1;',
+    '@ + $ @ - $ 1;',
+    'early call grouped'
+  ],
+  [
+    '({PLUS} {PLUS} {PLUS})=0,1 # ({MIN} {MIN} {MIN})=0,1 # ({PLUS} {PLUS} {PLUS})=0,1',
+    '+ + + - - - + + + 1;',
+    '@ + $ @ - $ @ + $ 1;',
+    'multiple early calls'
+  ],
+  [
+    '({PLUS} {PLUS} {PLUS})=0,1 # ({MIN} {MIN} {MIN})=0,1 # ({PLUS} {PLUS} {PLUS})=0,1 #',
+    '+ + + - - - + + + 1;',
+    '@ + $ @ - $ @ + $ 1;',
+    'final call'
+  ],
+  [
+    '({PLUS} # {PLUS} # {PLUS})=0,1',
+    '+ + + 1;',
+    '@ @ $ 1;',
+    'early call in group'
+  ],
+
+
 
   [
     '({`x`}{`+`}{`y`}{`+`}?)*@=0,1',
@@ -842,17 +1119,24 @@ var tests = module.exports = [
     '@ + y $ @ + $',
     'base: repeated calls, updating 0 and 1'
   ],
-//  [ // TODO
-//    '(({`x`}=1{`+`}{`y`}{`+`}?)=0,1 #)*',
-//    'x + y + x + y',
-//    '@ + y $ @ + $',
-//    'base: alternative way of writing @'
-//  ],
+  [
+    '(({`x`}=1{`+`}{`y`}{`+`}?)=0,1 #)*',
+    'x + y + x + y',
+    '@ + y $ @ + $',
+    'base: alternative way of writing @'
+  ],
   [
     '({`x`}=1{`+`}{`y`}{`+`}?)*@=0,1',
     'x + y + x + y',
     '@ + y $ @ + $',
     'updating 1 inside a repeated call which updates 1'
+  ],
+
+  [
+    '({`console`}({`.`})?)',
+    'function query(){ console.log(); }',
+    'function query(){ @.log(); }',
+    'regression; would match on nearly anything due to ?'
   ],
 
 
