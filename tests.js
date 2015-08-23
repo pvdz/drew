@@ -1139,6 +1139,43 @@ var tests = module.exports = [
     'regression; would match on nearly anything due to ?'
   ],
 
+  [
+    '([`b`][`;`])?[`c`][`;`]?',
+    'a;b;c;d;',
+    'a;@;c;d;',
+    'leading AND trailing optionals should still match if possible'
+  ],
+  [
+    '(([`b`][`;`])?[`c`][`;`]?)=,1',
+    'a;b;c;d;',
+    'a;@;c$d;',
+    'leading AND trailing optionals should still match if possible, grouped'
+  ],
+
+  [
+    '(({`!`}{`void`})?({`console`}{`.`}{`log`|`warn`|`group`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?))=0,1',
+    'group0 = checkTokenWhite(symw() && !void console.log("# 1001 start of literal [`b`] at 4 in query to token "+index+":", token()) && value(\'b\'));',
+    'group0 = checkTokenWhite(symw() && @void console.log("# 1001 start of literal [`b`] at 4 in query to token "+index+":", token()) $ value(\'b\'));',
+    'regression',
+  ],
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1',
+    'group0 = checkTokenWhite(symw() && !void console.log("# 1001 start of literal [`b`] at 4 in query to token "+index+":", token()) && value(\'b\'));',
+    'group0 = checkTokenWhite(symw() && @void console.log("# 1001 start of literal [`b`] at 4 in query to token "+index+":", token()) $ value(\'b\'));',
+    'regression',
+  ],
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1',
+    'if (console.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index),matchedSomething) {}',
+    'if (@.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index)$matchedSomething) {}',
+    'regression',
+  ],
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR})=0,1',
+    'if (console.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index),matchedSomething) {}',
+    'if (@.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index)$matchedSomething) {}',
+    'regression',
+  ],
 
 // TODO
 //  [
