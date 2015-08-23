@@ -15,7 +15,9 @@
       case './zeparser2/par.js': return window;
       case './parse': return parse;
       case './run': return run;
-      default: console.warn('fake require: unsupported path ['+path+']');
+      case './constants': return constants;
+      case './macros': return macros;
+      default: console.warn('fake require: unknown path (not hardcoded) ['+path+']');
     }
   }
   require.isFake = true; // browser detection hack :)
