@@ -1,57 +1,91 @@
 module.exports = run;
 
 var VERBOSE = true;
+function ds() { if (VERBOSE && ++VERBOSE > 5000) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
+function LOG(){ if (ds()) console.log.apply(console, arguments); }
+function WARN(){ if (ds()) console.warn.apply(console, arguments); }
+function ERROR(){ if (ds()) console.error.apply(console, arguments); }
+function GROPEN(){ if (ds()) console.group.apply(console, arguments); }
+function GRCLOSE(){ if (ds()) console.groupEnd.apply(console, arguments); }
 
-function run(tokens, queryCode, handler, mode, first, last){
-  if (!first) first = 0;
-  if (!last) last = tokens.length-2;
-  if (!mode) mode = 'once';
-//  console.log('######');
+function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIndex, stopTokenIndex){
+  LOG('run(<tokens>, <queryCode>, <handler>, '+[repeatMode, copyInputMode, startTokenIndex, stopTokenIndex].join()+')');
+  if (!startTokenIndex) startTokenIndex = 0;
+  if (!stopTokenIndex) stopTokenIndex = tokens.length-2;
+  if (!repeatMode) repeatMode = 'once'; // once, after, every
+  if (!copyInputMode) copyInputMode = 'nocopy'; // copy, nocopy
 
-  var index = first;
-  var max = last; // dont start at EOF token, it's artificial
-  var check = compile(queryCode, tokens, mode);
-  var count = 0;
-  var matchedSomething = false; // allows for optimizations, like `at query start only starting to match at black tokens
+  var index = startTokenIndex;
+  var max = stopTokenIndex; // dont start at EOF token, it's artificial
 
-  if (VERBOSE) console.group('Applying query to input: %o', tokens.map(function(t){ return t.value; }).join(''));
+  var copiedInput;
+  switch (copyInputMode) {
+    case 'copy':
+      LOG('inputMode=copy: Copying original input to local array');
+      WARN('Drew will cache the original <token>.value and not use your changes when applying the query');
+      copiedInput = Array(max-index); // we know how large the array will be
+      for (var i=index; i<max; ++i) copiedInput[i] = tokens[i].value;
+      LOG('clone:', copiedInput);
+      break;
+    case 'nocopy':
+      WARN('inputMode=nocopy: Drew will use actual values in <token>.value and use your changes when applying the query');
+      break;
+    default:
+      throw 'Assertion error: inputMode should be one of a fixed set';
+  }
+
+  switch (repeatMode) {
+    case 'once':
+      WARN('repeatMode=once: Drew will exit immediately after the first match');
+      break;
+    case 'after':
+      WARN('repeatMode=after: After a match Drew will continue with the first token _after_ the last match');
+      break;
+    case 'every':
+      WARN('repeatMode=every: After a match Drew will continue with the token after the last start');
+      break;
+    default:
+      throw 'Assertion error: repeatMode should be one of a fixed set';
+  }
+
+  var check = compile(queryCode, tokens, repeatMode, copiedInput);
+
+  WARN('Applying query to '+(copiedInput?'(c) ':'')+'input token %d to %d: %o ->', startTokenIndex, stopTokenIndex, (copiedInput ? copiedInput[startTokenIndex] : tokens[startTokenIndex].value), tokens[startTokenIndex]);
 
   while (index <= max) {
-    if (VERBOSE) console.group('Applying query starting at token '+index+' / '+max+':', tokens[index]);
-    var lastIndex = check(index, handler);
+    GROPEN('Applying query starting at '+(copiedInput?'(c) ':'')+'token %d / %d: %o ->', index, stopTokenIndex, (copiedInput ? copiedInput[index] : tokens[index].value), tokens[index]);
+    var lastIndex = check(index, handler, copiedInput);
 
-    if (!mode || mode === 'once') {
+    if (!repeatMode || repeatMode === 'once') {
       if (lastIndex) {
-        if (VERBOSE) console.warn('Found match ['+lastIndex+'], stopping search because mode=once');
-        if (VERBOSE) console.groupEnd();
+        WARN('Found match ['+lastIndex+'], stopping search because repeatMode=once');
+        GRCLOSE();
         break;
       } else {
-        if (VERBOSE) console.warn('No match ['+lastIndex+']['+mode+']');
+        WARN('No match ['+lastIndex+']['+repeatMode+']');
         ++index;
       }
-    } else if (mode === 'after') {
+    } else if (repeatMode === 'after') {
       if (index === lastIndex) {
-        if (VERBOSE) console.warn('No match ['+lastIndex+']['+mode+']');
+        WARN('No match ['+lastIndex+']['+repeatMode+']');
         ++index;
       } else {
-        if (VERBOSE) console.warn('Found match ['+lastIndex+'], jumping to after match because mode=after');
+        WARN('Found match ['+lastIndex+'], jumping to after match because repeatMode=after');
         index = lastIndex + 1;
       }
-    } else if (mode === 'every') {
-      if (lastIndex) if (VERBOSE) console.warn('Found match ['+lastIndex+'], starting with next token because mode='+mode);
-      else if (VERBOSE) console.warn('No match ['+lastIndex+']['+mode+']');
+    } else if (repeatMode === 'every') {
+      if (lastIndex) WARN('Found match ['+lastIndex+'], starting with next token because repeatMode='+repeatMode);
+      else WARN('No match ['+lastIndex+']['+repeatMode+']');
       ++index;
     } else {
-      throw 'unknown mode: '+mode;
+      throw 'unknown repeatMode: '+repeatMode;
     }
-    if (VERBOSE) console.groupEnd();
+    GRCLOSE();
   }
-  if (VERBOSE) console.groupEnd();
-
-
+  GRCLOSE();
 }
 
-function compile(queryCode, tokens, mode) {
+function compile(queryCode, tokens, repeatMode, _copiedInput) {
 //  LOG(queryCode);
 
   var STRING = 10;
@@ -85,17 +119,17 @@ function compile(queryCode, tokens, mode) {
   var callStack = []; // callback queue
   var callPointers = []; // in case we have to undo a callback in case of a failed future
 
-  function ds() { if (VERBOSE && ++VERBOSE > 5000) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
-  function LOG(){ if (ds()) console.log.apply(console, arguments); }
-  function WARN(){ if (ds()) console.warn.apply(console, arguments); }
-  function ERROR(){ if (ds()) console.error.apply(console, arguments); }
-  function GROPEN(){ if (ds()) console.group.apply(console, arguments); }
-  function GRCLOSE(){ if (ds()) console.groupEnd.apply(console, arguments); }
-
-  function value(str) {
-    var s = tokens[index] && tokens[index].value;
-    if (str) return s === str;
-    return s;
+  function is(str) {
+    LOG('is(): %o === %o -> %o', str, value(0), value(0) === str);
+    return str === value(0);
+  }
+  function value(delta) {
+    var target = index + (delta|0);
+    LOG('value(): copied=%o, target=%o', !!_copiedInput, target);
+    if (_copiedInput) return _copiedInput[target];
+    var t = tokens[target];
+    if (t) return t.value;
+    return '';
   }
   function token(overrideIndex) {
     return tokens[Math.max(0, typeof overrideIndex === 'number' ? overrideIndex : index)];
@@ -106,12 +140,12 @@ function compile(queryCode, tokens, mode) {
     return tokens[index].type;
   }
   function isNewline(delta) {
-    var token = tokens[index+delta];
-    return token.value === '\x0A' || token.value === '\x0D' || token.value === '\x0A\x0D' || token.value === '\u2028' || token.value === '\u2029';
+    var v = value(index+delta);
+    return v === '\x0A' || v === '\x0D' || v === '\x0A\x0D' || v === '\u2028' || v === '\u2029';
   }
   function isSpaceTabComment() {
     var c = tokens[index];
-    var v = c.value;
+    var v = value(index);
     // TOFIX: better comment handling... this is crap and very non-generic.
     // TOFIX: find generic solution to do stuff like ASI here as well.
     var ASI = 15;
@@ -326,10 +360,10 @@ function compile(queryCode, tokens, mode) {
       });
 
       // last token evaluated by query
-      if (mode === 'after') returnValue = Math.max(start, index - 1);
+      if (repeatMode === 'after') returnValue = Math.max(start, index - 1);
     } else {
       // continue as usual
-      if (mode === 'after') returnValue = start;
+      if (repeatMode === 'after') returnValue = start;
       else returnValue = false;
     }
 
@@ -337,7 +371,7 @@ function compile(queryCode, tokens, mode) {
     callStack.length = 0;
     tokensMatched.length = 0;
 
-    if (mode === 'once' || mode === 'after' || mode === 'every') return returnValue;
-    throw 'unknown mode: '+mode;
+    if (repeatMode === 'once' || repeatMode === 'after' || repeatMode === 'every') return returnValue;
+    throw 'unknown repeatMode: '+repeatMode;
   }
 }

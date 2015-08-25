@@ -23,6 +23,8 @@ function one(testCase, testIndex) {
   var input = testCase[1];
   var expect = testCase[2];
   var desc = testCase[3];
+  var repeatMode = testCase[4] || 'once';
+  var inputMode = testCase[5] || 'nocopy';
 
   var funcCode = undefined;
   var output = undefined;
@@ -30,7 +32,7 @@ function one(testCase, testIndex) {
 
   var div = document.createElement('div');
   div.innerHTML =
-    '<div>['+testIndex+'] <i>'+esc(desc||'')+'</i></div>'+
+    '<div>['+testIndex+':'+repeatMode+':'+inputMode+'] <i>'+esc(desc||'')+'</i></div>'+
     '<div>Query: <code>'+esc(rule)+'</code></div>'+
     '<div>Input: <code>'+esc(input)+'</code></div>'+
     '<div>Expect:<code>'+esc(expect)+'</code></div>'+
@@ -81,7 +83,7 @@ function one(testCase, testIndex) {
 
       output = tokens.whites.map(function(t){ return t.value; }).join('');
       if (targetTestIndex >= 0) console.error('OK! Test callback called!', args);
-    }, 'once');
+    }, repeatMode, inputMode);
   }
 
   outdiv.innerHTML = 'Running query against input...';

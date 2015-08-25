@@ -307,13 +307,13 @@ Constants will always be wrapped in parenthesis when extrapolating. This prevent
 
 ```
 [SPACE]
-if (value() === ' ') call(start())
+if (is(' ')) call(start())
 
 [TAB]
-if (value() === '\t') call(start())
+if (is('\t')) call(start())
 
 [WHITESPACE]
-if (value() === ' ' || value() === '\t') call(start())
+if (is(' ') || is('\t')) call(start())
 
 [WHITE]
 if (type() === WHITE) call(start())
@@ -322,25 +322,25 @@ if (type() === WHITE) call(start())
 if (token().expressionStart) {
 	nextAfter(token().expressionLastToken);
 	nextBlack();
-	if (value() === ';' && !token().forHeader) call(token());
+	if (is(';') && !token().forHeader) call(token());
 }
 
 [NEWLINE][TAB]*[SPACE]?=0[SPACE]?=1[COMMA]=2[SPACE]?=3
 if (newlined()) {
-	while (value() === '\t') next();
-	if (value() === ' ') {
+	while (is('\t')) next();
+	if (is(' ')) {
 		args[0] = token()
 		next()
 	}
-	if (value() === ' ') {
+	if (is(' ')) {
 		args[1] = token()
 		next()
 	}
-	if (value() === ',') {
+	if (is(',')) {
 		args[2] = token
 		next()
 
-		if (value() === ' ') {
+		if (is(' ')) {
 			args[3] = token()
 
 			call(args)
@@ -374,7 +374,7 @@ if (token().functionHeaderStart || token().statementHeaderStart) {
 	}
 
 	if (matched) {
-		if (value() === '{') {
+		if (is('{')) {
 			args[1] = token();
 
 			call(args);

@@ -67,7 +67,7 @@ function parse(query, hardcoded, macros) {
         if (VERBOSE) s += 'GRCLOSE();\n';
         s += '}\n';
         s += 'if (group'+currentGroup+') {\n';
-        if (VERBOSE) s += 'LOG("Last part matched, no need to check rest");\n';
+        if (VERBOSE) s += 'LOG("Last part of top level matched, no need to check rest after OR");\n';
         s += '} else {\n';
         if (VERBOSE) s += 'GROPEN("root OR start");\n';
         s += 'matchedSomething = false;\n';
@@ -451,10 +451,10 @@ function parse(query, hardcoded, macros) {
     assert('`');
 
     var r = s.replace(/'/g, '\\\'');
-    var t = ' && '+(invert?'!':'')+'value(\'' + r + '\')';
+    var t = ' && '+(invert?'!':'')+'is(\'' + r + '\')';
 
     var q = '';
-    if (VERBOSE) q = ' && !void LOG("# '+(++logCounter)+' start of literal [`'+ r.replace(/"/g,'\"')+'`] at '+pos+' in query to token "+index+":", token())';
+    if (VERBOSE) q = ' && !void LOG("# '+(++logCounter)+' start of literal [`%o`] at '+pos+' in query to token "+index+":", "'+ r.replace(/"/g,'\"')+'", token())';
 
     return q + t;
   }

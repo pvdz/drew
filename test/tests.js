@@ -1,6 +1,16 @@
 // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
 // so callback args get: 0=@, 1=$, 2... = #
 // note: tests are called in `once` mode, meaning they'll exit after the first match
+
+var REPEAT_ONCE = 'once';
+var REPEAT_AFTER = 'after';
+var REPEAT_EVERY = 'every';
+var INPUT_COPY = 'copy';
+var INPUT_NO_COPY = 'nocopy';
+
+// each test is an array with: [<query>, <input>, <output>[, <desc>[, <repeatmode=once>[, copymode=nocopy]]]]
+// (eg; desc, repeatmode, and copymode are optional)
+
 var tests = module.exports = [
   [
     '[SPACE]',
@@ -1175,6 +1185,48 @@ var tests = module.exports = [
     'if (console.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index),matchedSomething) {}',
     'if (@.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index)$matchedSomething) {}',
     'regression',
+  ],
+
+  // some cases with scoping of designators at the end in a complex query
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR}=2,3)',
+    'console.log(15);{ oh; hello; world; }',
+    '@.log(15)@# oh; hello; world; #',
+    '2 and 3 should be start and end of curly pair',
+    REPEAT_EVERY,
+    INPUT_COPY
+  ],
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR}=2,3)',
+    'console.log(15);{ oh; hello; world; }',
+    '@.log(15)${ oh; hello; world; }',
+    'without copy the top level OR part wont match because the first part will replace the semi-colon so it wont match',
+    REPEAT_EVERY,
+    INPUT_NO_COPY
+  ],
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR}=2,3)',
+    'console.log(15);{ oh; hello; world; }',
+    '@.log(15)${ oh; hello; world; }',
+    'without repeating every token the first part will match, then start matching after the semi so the second part wont match, even if you copy',
+    REPEAT_AFTER,
+    INPUT_COPY
+  ],
+  [
+    '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR}=2,3)',
+    'console.log(15);{ oh; hello; world; }',
+    '@.log(15)${ oh; hello; world; }',
+    'without repeating every token the first part will match, then start matching after the semi so the second part wont match',
+    REPEAT_AFTER,
+    INPUT_NO_COPY
+  ],
+  [
+  '(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR})=2,3',
+    'console.log(15);  { oh; hello; world; }',
+    '@.log(15)#  { oh; hello; world; #',
+    '2 and 3 wrap the entire group starting at semi',
+    REPEAT_EVERY,
+    INPUT_COPY
   ],
 
 // TODO

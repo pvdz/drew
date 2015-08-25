@@ -21,7 +21,7 @@ console.log(funcCode);
 
 run(tokens.whites, funcCode, function(){
   console.error('OK! ## rule matched!:', [].slice.call(arguments, 0));
-}, 'once');
+}, 'once', 'nocopy');
 
 console.log(tokens.whites.map(function(t){ return t.value; }).join(''));
 

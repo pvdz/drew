@@ -24,7 +24,7 @@ function convert(input, obj) {
       var handler = details.handler.bind(undefined, tokens);
 
       details.handler.sub = function(ruleName, first, last, handler){
-        run(tokens, compiled[details.rule], handler, details.mode, first, last);
+        run(tokens, compiled[details.rule], handler, details.mode, 'nocopy', first, last);
       };
 
       do {
@@ -39,7 +39,7 @@ function convert(input, obj) {
 
         console.group('run');
         console.log('Rule:', details.rule);
-        run(tokens, compiled[details.rule], handler, details.mode);
+        run(tokens, compiled[details.rule], handler, details.mode, 'nocopy');
         console.groupEnd();
 
         input = tokens.map(function(t){ return t.value; }).join('');
