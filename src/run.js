@@ -131,7 +131,7 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
   }
   function value(delta) {
     var target = index + (delta|0);
-    LOG('value(): copied=%o, target=%o', !!_copiedInput, target);
+    LOG('value('+delta+'): copied=%o, target=%o', !!_copiedInput, target);
     if (_copiedInput) return _copiedInput[target];
     var t = tokens[target];
     if (t) return t.value;
@@ -146,12 +146,12 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     return tokens[index].type;
   }
   function isNewline(delta) {
-    var v = value(index+delta);
+    var v = value(delta);
     return v === '\x0A' || v === '\x0D' || v === '\x0A\x0D' || v === '\u2028' || v === '\u2029';
   }
   function isSpaceTabComment() {
     var c = tokens[index];
-    var v = value(index);
+    var v = value(0);
     // TOFIX: better comment handling... this is crap and very non-generic.
     // TOFIX: find generic solution to do stuff like ASI here as well.
     var ASI = 15;
