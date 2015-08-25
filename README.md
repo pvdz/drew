@@ -42,12 +42,23 @@ All tokens in a query should be wrapped in `[]` or `{}`. You'll probably end up 
 These always go inside a token wrapper (`[]` or `{}`)
 
 - `` `...` `` = literal token value match (maybe with regex-like features like wildcards?). Only inside a token or group. Currently must match entire token value. Future plans to extend this syntax for partial/regex matches.
+- `` `...`i `` = same as literal token but with case insensitive match (will apply .toLowerCase() to either side first)
 - `TAB` = macros or constants. aliases for literals, other macros, or hardcoded constants, or any combination thereof. Each can only be used either inside or outside tokens. See section below. 
 - `|` = "or" `[A | B]` matches if it either matches criteria A or B. Can be used in and outside tokens.
 - `&` = "and" `[A & B]` matches if it matches criteria A and B. Can be used inside tokens. They are implied outside of tokens.
 - `()` = group criteria ``[SPACE | (ARG & `foo`)]`` or tokens.
 - `*` = assert any one token. do not apply any other matching criteria (could be used together with other conditions, but why would you). Used to skip one token unconditionally.
 - `!` = negate the next matching condition or group: `[!SPACE]` (you dont need peek, you can add multiple conditions for the same token with `&` and `|`). Only inside tokens.
+- `/regex/flags` = a normal (JS) regular expression to apply to the whole value of the (one!) token (-> `token.value.test(/foo/)`).
+
+# Matching with Regular Expression
+
+Use this for partial matches.
+
+- This is relatively slow (because regular expressions are relatively slow in JS).
+- Note that you must use the `^` and `$` chars to make the whole regex match the whole token, otherwise a partial match also passes
+- Regular backslash rules apply.
+- Only the `i` flag is valid, other flags would be useless (due to the way `.test()` works)
 
 # Seeking past spaces, tabs, and comments
 

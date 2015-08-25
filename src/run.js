@@ -123,6 +123,12 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     LOG('is(): %o === %o -> %o', str, value(0), value(0) === str);
     return str === value(0);
   }
+  function isi(str) {
+    var a = String(str).toLowerCase();
+    var b = String(value(0)).toLowerCase();
+    LOG('isi(): %o === %o -> %o', a, b, b === a);
+    return a === b;
+  }
   function value(delta) {
     var target = index + (delta|0);
     LOG('value(): copied=%o, target=%o', !!_copiedInput, target);

@@ -388,18 +388,23 @@ function parse(query, hardcoded, macros) {
       assert('!');
       invert = !invert;
     }
-    if (peek('`')) {
-      if (!insideToken) reject('Trying to parse a literal while not inside a tag');
-      return parseLiteral(invert);
-    }
-    if (peek('*')) {
-      if (!insideToken) reject('Unit test: inconsistent; is this star a quantifier or condition?');
-      return parseStarCondition(invert);
-    }
-    if (peek('(')) {
-      return parseAtomMaybe(NOT_TOPLEVEL, insideToken, undefined, undefined, invert);
-    }
     var peeked = peek();
+    switch (peeked) {
+      case '`':
+        if (!insideToken) reject('Trying to parse a literal while not inside a tag');
+        return parseLiteral(invert);
+
+      case '*':
+        if (!insideToken) reject('Unit test: inconsistent; is this star a quantifier or condition?');
+        return parseStarCondition(invert);
+
+      case '(':
+        return parseAtomMaybe(NOT_TOPLEVEL, insideToken, undefined, undefined, invert);
+
+      case '/':
+        if (insideToken) return parseRegex();
+    }
+
     if ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked === '$' || peeked === '_')) {
       return parseSymbol(insideToken, tokenGroupIndex, invert);
     }
@@ -449,15 +454,42 @@ function parse(query, hardcoded, macros) {
     }
     if (protection <= 0) {debugger; throw 'loop protection'; }
     assert('`');
+    var ci = peek('i');
+    if (ci) ++pos;
 
     var r = s.replace(/'/g, '\\\'');
-    var t = ' && '+(invert?'!':'')+'is(\'' + r + '\')';
+    var t = ' && '+(invert?'!':'')+'is'+(ci?'i':'')+'(\'' + r + '\')';
 
     var q = '';
     if (VERBOSE) q = ' && !void LOG("# '+(++logCounter)+' start of literal [`%o`] at '+pos+' in query to token "+index+":", "'+ r.replace(/"/g,'\"')+'", token())';
 
     return q + t;
   }
+  function parseRegex() {
+    // take care with consume() in this function; it skips whitespace, even in literals.
+    // we only need to parse a regex-ish token, we dont need to validate it
+    // to this purpose we will parse escapes as always escaping a single character
+    // the rationale is that even if they are a unicode escape, we dont have to
+    // care about that. this leaves the "class" construction, which should just
+    // be a double backslash anyways so i'll ignore that too. that makes this
+    // pretty easy :)
+
+    var start = pos;
+    while (++pos < query.length && query[pos] !== '/') {
+      if (query[pos] === '\\') ++pos; // just skip a char. dont care.
+    }
+    var regex = query.slice(start+1, pos);
+    ++pos; // skip forward slash
+    var ci = peek('i');
+    if (ci) ++pos;
+    var regstr = '/'+ regex+'/'+(ci?'i':'');
+
+    var q = '';
+    if (VERBOSE) q = ' && !void LOG("# '+(++logCounter)+' start of regex [`%o`] at '+pos+' in query to token "+index+":", '+regstr+', token())';
+
+    return q + "&& "+regstr+".test(value(0))";
+  }
+
 
   function parseStarCondition(invert) {
     assert('*');

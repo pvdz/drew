@@ -1229,6 +1229,57 @@ var tests = module.exports = [
     INPUT_COPY
   ],
 
+  // regex
+  [
+    '{/foo/}',
+    'foo',
+    '@',
+    'simple regex straight match'
+  ],
+  [
+    '{/foo/}',
+    'bloofoo',
+    '@',
+    'partial match without ^$'
+  ],
+  [
+    '{/foo/}',
+    'foobloo',
+    '@',
+    'partial match without ^$'
+  ],
+  [
+    '{/foo/}',
+    'bloofoobloo',
+    '@',
+    'partial match without ^$'
+  ],
+  [
+    '{/foo/i}',
+    'blooFoobloo',
+    '@',
+    'case insensitive flag'
+  ],
+  [
+    '{`foo`i}',
+    'Foo',
+    '@',
+    'case insensitive literal flag'
+  ],
+  [
+    '{`a`}{/\\./}{`c`}',
+    'a.c',
+    '@.c',
+    'backslashed dot should match dot',
+  ],
+  [
+    '{`a`}{/\\./}{`c`}',
+    'abc',
+    'abc',
+    'backslashed dot should not match b',
+  ],
+
+
 // TODO
 //  [
 //    '[`x`]#[`y`]|[`z`]',
