@@ -1,0 +1,174 @@
+<script>var module = {};</script>
+<script src="../lib/zeparser2/uni.js"></script>
+<script src="../lib/zeparser2/tok.js"></script>
+<script src="../lib/zeparser2/par.js"></script>
+
+<script src="../src/constants.js"></script>
+<script src="../src/macros.js"></script>
+<script src="../src/parse.js"></script>
+<script src="../src/run.js"></script>
+<script>
+  function require(path) {
+    switch (path) {
+      case './../lib/zeparser2/uni.js':
+        return window;
+      case './../lib/zeparser2/tok.js':
+        return window;
+      case './../lib/zeparser2/par.js':
+        return window;
+      case './../src/parse':
+        return parse;
+      case './../src/run':
+        return run;
+      case './../src/constants':
+        return constants;
+      case './../src/macros':
+        return macros;
+      default:
+        console.warn('fake require: unknown path (not hardcoded) [' + path + ']');
+    }
+  }
+  require.isFake = true; // browser detection hack :)
+</script>
+
+
+<style>
+  body { margin: 0; padding: 0; }
+  #top { position: relative; height: 50px; width: 100%; box-sizing: border-box; padding: 10px; margin-right: 0; }
+  #main { position: relative; width: 99%; height: calc(100% - 70px); margin: 10px; padding: 0; }
+  #main > div { float: left; width: calc(50% - 20px); height: calc(50% - 20px); }
+  #main > div > textarea { width: 100%; height: 100%; }
+</style>
+
+<div id="top">
+  <div style="overflow: auto;">
+    <div style="float: left;">
+      <button id="go">go</button>
+    </div>
+    <div style="float: left; border: 1px solid black; margin-left: 5px; margin-bottom: 2px; padding: 0 5px;">
+      Repeat mode:
+      <input type="radio" name="repeatMode" value="once"> once
+      <input type="radio" name="repeatMode" value="after" checked> after
+      <input type="radio" name="repeatMode" value="every"> every
+    </div>
+    <div style="float: left; border: 1px solid black; margin-left: 5px; padding: 0 5px;">Input copy mode:
+      <input type="radio" name="copyInputMode" value="nocopy"> nocopy (use token value as is)
+      <input type="radio" name="copyInputMode" value="copy" checked> copy (use token value as originally given, ignore runtime changes)
+    </div>
+  </div>
+  <div>Query:
+    <button id="parse">parse</button>
+    <input id="query" style="width: calc(100% - 150px);"
+     value="(({`!`}{`void`})?{`console`}{`.`}{`log`|`warn`|`group`|`groupEnd`|`error`}{PAREN_PAIR}({`&&`}|{`||`}|{`;`}|{`,`})?)=0,1|({`;`}{CURLY_PAIR}=2,3)"
+    >
+  </div>
+</div>
+<div id="main">
+  <div style="margin-right: 10px; margin-bottom: 20px;">
+    <div>Debug</div>
+    <textarea id="debug"></textarea>
+  </div>
+  <div style="margin-bottom: 20px;">
+    Handler: function(<input id="args" value="cleanStart, cleanStop, curlyOpen, curlyClose">){
+    <textarea id="handler">
+      try {
+        document.querySelector('#debug').value += 'match callback: '+arguments.length+': '+JSON.stringify([].slice.call(arguments, 0))+'\n\n';
+      } catch (e) {
+        document.querySelector('#debug').value += 'match callback: '+arguments.length+': (json stringify failed)';
+      }
+
+
+      if (curlyOpen && curlyClose) {
+        curlyOpen.value = '';
+        curlyClose.value = '';
+      } else if (cleanStart && cleanStop) {
+        for (var i=cleanStart.white; i<=cleanStop.white; ++i) {
+          TOKENS.whites[i].value = '';
+        }
+      }
+    </textarea>
+  </div>
+  <div style="margin-right: 10px;">
+    <div>Input code</div>
+    <textarea id="input">
+    function query(){
+    // input query: [`b`][`;`]~$$
+    // final query: [`b`][`;`]~$$
+    // query start..
+  var group0 = false;
+  matchedSomething = false;
+  console.group("root start");
+  { // parseAtomMaybe 1 for a white token `[`
+  // white token 1:0
+  group0 = checkTokenWhite(symw() && !void console.log("# 1001 start of literal [`b`] at 4 in query to token "+index+":", token()) && value('b'));
+  } // `]` 1 for a white token
+
+  if (group0)
+  // white token 2:1
+  group0 = checkTokenWhite(symw() && !void console.log("# 1002 start of literal [`;`] at 9 in query to token "+index+":", token()) && value(';'));
+
+  if (group0)
+    // dont seek for leading ~, just wait for a non-spacy token
+  if (console.log("~ seek() past spaces and tabs at all?", matchedSomething, "start=", index),matchedSomething) {
+    if (isSpaceTabComment()) {
+      console.log("~ skipping spaces and tabs");
+      do ++index;
+      while (isSpaceTabComment()); // ~
+    }
+    group0 = !isWhite(); // if current is white now, seek failed
+  console.log(group0?"~ passed":"~ failed", index);
+  }
+
+  if (group0)
+  console.log("$$ end of file?", index >= tokens.length),(group0 = (index >= tokens.length)); // $$
+  (matchedSomething = true);
+
+  console.groupEnd();
+
+    // query end..
+    return group0;
+  }
+    </textarea>
+  </div>
+  <div>
+    <div>Output code</div>
+    <textarea id="output"></textarea>
+  </div>
+</div>
+
+<script>
+  document.querySelector('#parse').onclick = function () {
+    var rule = document.querySelector('#query').value;
+    var funcCode = parse(rule, constants, macros);
+    document.querySelector('#debug').value = funcCode;
+  };
+  document.querySelector('#go').onclick = function () {
+    VERBOSE = 1; // reset dead mans switch, just in case
+
+    document.querySelector('#debug').value = '';
+    var rule = document.querySelector('#query').value;
+    var repeatMode = document.querySelector('[name="repeatMode"]:checked').value;
+    var copyInputMode = document.querySelector('[name="copyInputMode"]:checked').value;
+
+    var input = document.querySelector('#input').value;
+    var handler = Function.apply(Function, document.querySelector('#args').value.split(',').concat([document.querySelector('#handler').value]));
+
+    console.log('Target query:', [rule]);
+    console.log('Target input:', [input]);
+    console.log(handler);
+
+    var funcCode = parse(rule, constants, macros);
+    window.TOKENS = Par.parse(input, {saveTokens: true});
+    console.log(funcCode);
+    console.log('tokens:', TOKENS);
+
+    console.log('run');
+    run(TOKENS.whites, funcCode, handler, repeatMode, copyInputMode);
+    console.log('run');
+
+    document.querySelector('#output').value = TOKENS.whites.map(function (t) {
+      return t.value;
+    }).join('');
+  };
+
+</script>
