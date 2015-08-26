@@ -108,16 +108,18 @@ function parse(query, hardcoded, macros) {
 
   function parseAtomMaybe(top, insideToken, tokenGroupNumber, isTopLevelStart, invert){
     lastAtomStart = pos;
+    var startpos = pos; // for debugging
     var currentCounter = counter++;
 
     var beforeQuantifier = '';
     var afterQuantifier = '';
-    var result = '\n//#parseAtomMaybe\n';
+    var result = '';
 
     if (!isTopLevelStart && !insideToken) result += 'if (group'+tokenGroupNumber+') // parseAtomMaybe, not first on top level query\n';
 
     if (peek('[')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
+      result += '// - its a white token\n';
       if (isTopLevelStart) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for a white token `[`\n';
       beforeQuantifier += '// white token '+currentCounter+':'+(tokenCounter++)+'\n';
       beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenWhite(symw()' + parseWhiteToken();
@@ -131,6 +133,7 @@ function parse(query, hardcoded, macros) {
     } else if (peek('{')) {
       if (insideToken) reject('Trying to parse another token while inside a token');
       if (isTopLevelStart) beforeQuantifier += '{ // parseAtomMaybe '+currentCounter+' for black token `{`\n';
+      result += '// - its a black token\n';
       beforeQuantifier += '// black token '+currentCounter+':'+(tokenCounter++)+'\n';
       beforeQuantifier += 'group'+tokenGroupNumber+' = checkTokenBlack(symb()' + parseBlackToken();
 
@@ -142,12 +145,14 @@ function parse(query, hardcoded, macros) {
       result += (insideToken?'':'}\n');
     } else if (peek('(')) {
       if (insideToken) {
+        result += '// - its a _nested_ group\n';
         beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, tokenGroupNumber, false) + ')';
 
         result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter, insideToken);
         result += (insideToken?'':'}\n');
       } else {
+        result += '// - its a outer group\n';
 
         beforeQuantifier += '{ // parseAtomMaybe ' + currentCounter + ' for a token group `(`\n';
         beforeQuantifier += '// start group ' + currentCounter + '\n';
@@ -168,6 +173,7 @@ function parse(query, hardcoded, macros) {
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       }
     } else if (peek('#')) {
+      result += '// an explicit callback (#)\n';
       assert('#');
       if (insideToken) reject('Cannot trigger early callback inside a token');
 
@@ -176,15 +182,19 @@ function parse(query, hardcoded, macros) {
 
       parseColonComment();
 
-      result = 'queueEarlyCall("' + id + '");\n';
+      result += 'queueEarlyCall("' + id + '");\n';
     } else {
-
       // at this point it must be a top level ^ ^^ $ $$ or ~, or nothing.
       var r = parseLineStuff(insideToken, tokenGroupNumber, OPTIONAL);
-      return r ? result + r : r;
+      if (!r) return r;
+      result += '// - it must be a line start or end or tilde...\n';
+      result += r;
     }
 
-    result += '// parseAtomMaybe end\n';
+    result =
+      '\n//#parseAtomMaybe (parsed `'+query.slice(startpos, pos).replace(/\n/g, '\\n')+'`)\n'+
+      result +
+      '// parseAtomMaybe end\n';
     return result;
   }
 
@@ -611,9 +621,10 @@ function parse(query, hardcoded, macros) {
     var FORCE_PARAMFILL = true;
 
     var min = 0;
-    var max = 0; // 0=infinite upper bound
+    var max = 0; // 0 => token.length
 
     var peeked = peek();
+    var startpos = pos; // for debugging
 
     if (peeked === '+') {
       min = 1;
@@ -678,9 +689,10 @@ function parse(query, hardcoded, macros) {
 
     var result =
       '{ // parseQuantifiers '+currentCounter+':'+tokenGroupNumber+'\n' +
-        'var loopProtection'+currentCounter+' = 10000;\n' +
+        '// quantifier for this part of the query: `'+(query.slice(startpos, pos))+'`\n'+
+        'var loopProtection'+currentCounter+' = 20000;\n' +
         'var min'+currentCounter+' = '+min+';\n' +
-        'var max'+currentCounter+' = '+max+';\n' +
+        'var max'+currentCounter+' = '+max+' || tokens.length;\n' +
         'var count'+currentCounter+' = 0;\n' +
         'var startIndex'+currentCounter+' = index;\n' +
         'do { // parseQuantifiers '+currentCounter+':'+tokenGroupNumber+'\n' +
@@ -693,7 +705,7 @@ function parse(query, hardcoded, macros) {
           afterAssignments +
           // restore index if this group did not match ("backtracking")
         '  if (!group'+tokenGroupNumber+') index = startIndex'+innerCounter+';\n' +
-        '} while(group'+tokenGroupNumber+' && --loopProtection'+currentCounter+' > 0 && (++count'+currentCounter+' < max'+currentCounter+' || !max'+currentCounter+'));\n' +
+        '} while(group'+tokenGroupNumber+' && --loopProtection'+currentCounter+' > 0 && (++count'+currentCounter+' < max'+currentCounter+'));\n' +
         'if (loopProtection'+currentCounter+' <= 0) throw "Loop protection!";\n' +
         // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
         'group'+tokenGroupNumber+' = count'+currentCounter+' >= min'+currentCounter+';\n' +
