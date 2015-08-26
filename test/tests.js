@@ -1279,6 +1279,48 @@ var tests = module.exports = [
     'backslashed dot should not match b',
   ],
 
+  [
+    '({`{`}{`}`})=0,1|[NEWLINE]=2',
+    '{\n}',
+    '@#$',
+    'the black token condition should skip past the whites but the OR should rewind this part',
+    REPEAT_EVERY,
+    INPUT_COPY
+  ],
+
+  [
+    '{`A`}|{`B`}=2',
+    'A',
+    '@',
+    'match should be assigned to 0, 2 should bind to B (but wont match)'
+  ],
+  [
+    '{`A`}|{`B`}=2',
+    'B',
+    '#',
+    'match should be assigned to 2'
+  ],
+  [
+    '{`;`}+|{`!`}=1,2',
+    ';;;;;; !!!!!x',
+    '@;;;;; !!!!!x',
+    'should assign to 0, ignore the 1 and 2',
+    REPEAT_ONCE
+  ],
+  [
+    '{`A`}+|{`!`}=1,2',
+    '-+-+x; !!!!!x',
+    '-+-+x; #!!!!x',
+    'should assign first B to 1 and 2',
+    REPEAT_ONCE
+  ],
+
+  [
+    '[NEWLINE][!NEWLINE]*[NEWLINE]',
+    'a\nb',
+    'a\nb',
+    'regression: caused infinite loop',
+  ]
 
 // TODO
 //  [
