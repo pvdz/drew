@@ -1,7 +1,8 @@
 module.exports = run;
 
 var VERBOSE = true;
-function ds() { if (VERBOSE && ++VERBOSE > 5000) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
+var VERBOSEMAX = 5000;
+function ds() { if (VERBOSE && ++VERBOSE > VERBOSEMAX) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
 function LOG(){ if (ds()) console.log.apply(console, arguments); }
 function WARN(){ if (ds()) console.warn.apply(console, arguments); }
 function ERROR(){ if (ds()) console.error.apply(console, arguments); }
@@ -23,8 +24,8 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
     case 'copy':
       LOG('inputMode=copy: Copying original input to local array');
       WARN('Drew will cache the original <token>.value and not use your changes when applying the query');
-      copiedInput = Array(max-index); // we know how large the array will be
-      for (var i=index; i<max; ++i) copiedInput[i] = tokens[i].value;
+      copiedInput = Array(max+1-index); // we know how large the array will be
+      for (var i=index; i<=max; ++i) copiedInput[i] = tokens[i].value;
       LOG('clone:', copiedInput);
       break;
     case 'nocopy':
@@ -131,11 +132,10 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
   }
   function value(delta) {
     var target = index + (delta|0);
-    LOG('value('+delta+'): copied=%o, target=%o', !!_copiedInput, target);
-    if (_copiedInput) return _copiedInput[target];
+    LOG('value('+delta+'): copied=%o, target=%o', !!_copiedInput, target + '/' + (tokens.length-1), '->', (_copiedInput ? _copiedInput[target] : tokens[target]));
+    if (_copiedInput) return _copiedInput[target] || '';
     var t = tokens[target];
-    if (t) return t.value;
-    return '';
+    return t && t.value || '';
   }
   function token(overrideIndex) {
     return tokens[Math.max(0, typeof overrideIndex === 'number' ? overrideIndex : index)];
