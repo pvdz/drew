@@ -31,9 +31,12 @@ function parse(query, hardcoded, macros) {
   function consume() {
     var c = query[pos++];
 
-    while (white(query[pos])) ++pos;
+    consumeWhites();
 
     return c;
+  }
+  function consumeWhites() {
+    while (white(query[pos])) ++pos;
   }
   function peek(c) {
     var d = query[pos];
@@ -384,7 +387,7 @@ function parse(query, hardcoded, macros) {
 
   function parseMatchConditions(insideToken, tokenGroupIndex, invert){
     var s = parseMatchParticle(insideToken, tokenGroupIndex, invert);
-    while (peek('|') || peek('&')) {
+    while (consumeWhites() || peek('|') || peek('&')) {
       var d = consume();
 
       s = ' && (true' + s + ' ' + d + d + ' (true' + parseMatchParticle(insideToken, tokenGroupIndex) + '))';
