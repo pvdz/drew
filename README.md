@@ -60,14 +60,6 @@ Use this for partial matches.
 - Regular backslash rules apply.
 - Only the `i` flag is valid, other flags would be useless (due to the way `.test()` works)
 
-# Seeking past spaces, tabs, and comments
-
-Outside a token context you can use `~` to seek up to the next black token or newline. This will keep consuming whitespace until the current token is black or a newline. This will not consume anything if the current token is already black, a newline, the first token of input, or EOF.
-
-While not required to be used in conjunction, this is available to use `^` and `$` because other mechanisms would consume the token. But beware that `{A}` is not exactly the same as `~[A]`; the tilde (`~`) will stop seeking after the first newline and won't seek at the start of input. The curly brackets do continue to seek in those cases.
-
-_In Regex terms, this is similar to skipping as long as the current token matches `/[ \t]/`._
-
 # Start or end of line or file
 
 This is the `line-atom` rule. These special tokens (no wrapper allowed) are used to match the start or end of a line or file.
@@ -77,9 +69,11 @@ This is the `line-atom` rule. These special tokens (no wrapper allowed) are used
 - `$`: Match end of line or file. Checks whether next token is a newline or is EOF.
 - `$$`: Match end of file. Checks whether next token is EOF.
 
-Obviously the symbols are chosen to match regular expressions. The first four will not consume the token they match. 
+Obviously the symbols are chosen to match regular expressions. These symbols will not consume the token they match. 
 
 None of these influence the start or end index of a match directly (in particular when used at the start or end of a query).
+
+Use the `~` (see lower) to seek to the next black token OR newline token.
 
 # Literal escaping
 
@@ -250,6 +244,56 @@ Use colon-comments to clarify certain args or add a description. Colon comments 
 It's possible to trigger a callback multiple times, even from mid-way a query. All callbacks are queued while applying the rule. Only when the rule passes entirely will all individual callbacks be triggered in the order they were queued.
 Can appear anywhere where a token may start. They can have an optional designator and optional colon-comment.
 You can't use this to get a callback on a partial match since stuff is queued lazily and discarded when the match turns out to fail.
+
+# Pointer manipulation
+
+## ~ Seeking past spaces, tabs, and comments
+
+Outside a token context you can use `~` to seek up to the next black token or newline. This will keep consuming whitespace until the current token is black or a newline. This will not consume anything if the current token is already black, a newline, the first token of input, or EOF.
+
+While not required to be used in conjunction, this is available to use `^` and `$` because other mechanisms would consume the token. But beware that `{A}` is not exactly the same as `~[A]`; the tilde (`~`) will stop seeking after the first newline and won't seek at the start of input. The curly brackets do continue to seek in those cases.
+
+_In Regex terms, this is similar to skipping as long as the current token matches `/[ \t]/`._
+
+## > < >> << Skip one white or black token
+
+Sometimes you may want to manipulate the pointer directly. You can use `>` or `<` to move one white token forward or backwards. You can use `>>` or `<<` to move one black token forward or backwards.
+
+- `>` = move the pointer after the current white token
+- `>>` = move the pointer after the first black token from current
+- `<` = move the pointer before the previous white token
+- `<<` = move the pointer back to before the first previous black token
+
+These skips are unconditionally. So if you want to skip 5 tokens but there are only 3 to skip, the match doesn't fail. The pointer will simply be at the start or end.
+
+When used at the start of a query they are ignored so effectively useless... (use backjumps after matching something for the same effect)
+
+If you need to jump more than one token, you can add a number to have Drew do this many jumps. So `>>5` skips the next five black tokens (similar to `{*}5`, though unconditionally).
+
+Be careful! This mechanisms may allow you to cause infinite loops. There are awol loop protections in place but you don't want to trigger them.
+
+- `{a}<{b}` - This would be the same as `{a & b}`, except it doesn't fail the match if the token does not exist
+- `{a}>{b}` - This would be the same as `{a}[*]{b}`, except it doesn't fail the match if the token does not exist
+- `{a}<<{b}` - Same as `{a & b}` because a match ends immediately after the token. `{a}{b}<<2{c}>>` would be the same as `{a&c}{b}`, but could be a quick forward check optimization (`c` wont be evaluated at all if `b` doesn't match anyways)
+- `{a}>>{b}` - Same as `{a}{*}{b}`, skip a black token unconditionally, except it doesn't fail the match if the token does not exist
+- `{a}>> 2{b}` - Same as `{a}{*}{*}{b}`, whitespace is ignored between the op and the number
+- `{a}>>>{b}` - Silly, but same as `{a}{*}[*]{b}`, except it doesn't fail the match if the token does not exist
+- `{a}>>>>{b}` - Sillier, but same as `{a}{*}{*}{b}`, except it doesn't fail the match if the token does not exist
+
+One use case is in conjunction with repeat mode = `"after"` to make Drew jump back a bit after a match, such that the next match starts inside the previous match, while still having the partial advantage `"after"` offers.
+
+Say you want to eliminate empty lines, you can match `([NEWLINE][WHITE & ^NEWLINE]*)=0,1[NEWLINE]<` on repeat and remove anything between and including matches. You can put drew in "after" mode, and after each match Drew will continue at the last newline that was matched so it can be the first token to match. Without this mechanism it'd be difficult to eliminate repetitive matches.
+
+Another case I once had is eliminating two different things with a single query, where the second thing was part of the first:
+
+```
+console.log(x);
+{
+stuff;
+}
+```
+
+I had a query that would eliminate console stuff AND blocks that weren't part of another statement. I used something like `({console}{.}{log}{parens}{semi_pair})|({semi}{curly_pair})` for this. The first part would match but then Drew would continue after this match and the semi colon would not be seen, meaning the second part would not match this example. Adding `<<` to the query would fix it.
 
 ## Multiple calls
 

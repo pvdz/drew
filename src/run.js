@@ -157,31 +157,40 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     var ASI = 15;
     return v === ' ' || v === '\t' || (v[0] === '/' && (v[1] === '/' || v[1] === '*') || c.type === ASI);
   }
-  function next() {
-    ++index;
+  function next() { // unless EOF always consumes at least one token
+    if (index < tokens.length) LOG('(next)', index, '->', index+1, tokens[index+1]), ++index;
   }
-  function seek() { // only consumes if current is white
+  function consumeToBlack() { // only consumes if current is white
+    LOG('consumeToBlack() (move to next black token if not already)');
     if (isWhite()) {
 //      if (from === index) return false; // wait till first token is black before actually matching
-      nextBlack();
+      skipOneThenUpToNextBlack();
     }
     return !isWhite();
   }
   function isWhite() {
-    var t = t || tokens[index];
+    var t = tokens[index];
     return t && (t.type === WHITE || t.type === EOF);
   }
   function skipTo(newIndex) {
     index = newIndex;
     return true;
   }
-  function nextBlack() { // always consumes at least one token
-    do ++index;
-    while (isWhite());
+  function skipOneThenUpToNextBlack() { // unless EOF always consumes at least one token
+    var t = tokens[index];
+    do LOG('(skipOneThenUpToNextBlack)', index, '->', index+1, tokens[index+1]), ++index;
+    while (isWhite() && t && t.type !== EOF);
+  }
+  function rewindToBlack() { // move back the pointer until it points to a black token (may not move at all)
+    LOG('rewindToBlack', index);
+    while (isWhite() && index) {
+      --index;
+    }
+    LOG('- to', index, tokens[index]);
   }
 
   function symw() {
-    GROPEN('white token', argStack.slice(0), tokens[index]);
+    GROPEN('white token', argStack.slice(0), 'index='+index, tokens[index]);
     updateSymbStarts();
     symbolStarts.push(index);
     if (argStack.length === 0) argStack.push('0', index); // set default 0 key to first black
@@ -207,7 +216,7 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
 
   function symb() {
     GROPEN('black token', argStack.slice(0), tokens[index]);
-    if (!seek()) return false;
+    if (!consumeToBlack()) return false;
     updateSymbStarts();
     symbolStarts.push(index);
     if (argStack.length === 0) argStack.push('0', index); // set default 0 key to first black

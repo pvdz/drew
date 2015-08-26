@@ -15,12 +15,36 @@ var tests = module.exports = [
   [
     '[SPACE]',
     'var a = 20;',
-    'var@a = 20;'
+    'var@a = 20;',
+    'spaces',
+    REPEAT_ONCE
+  ],
+  [
+    '[SPACE]',
+    'var a = 20;',
+    'var@a@=@20;',
+    'spaces',
+    REPEAT_AFTER
+  ],
+  [
+    '[SPACE]',
+    'var a = 20;',
+    'var@a@=@20;',
+    'spaces',
+    REPEAT_EVERY
   ],
   [
     '[SPACE | TAB]',
     'var a\t= 20;',
-    'var@a\t= 20;'
+    'var@a\t= 20;',
+    'space tab',
+  ],
+  [
+    '[SPACE | TAB]',
+    'var a\t= 20;',
+    'var@a@=@20;',
+    'space tab',
+    REPEAT_EVERY
   ],
   [
     '[SPACE][COMMA][SPACE]',
@@ -1383,6 +1407,125 @@ var tests = module.exports = [
     ' foo;',
     'can use parens to disambiguate, a&(b|c) now the punc wont match because a wont match'
   ],
+
+  [
+    '{`a`}[` `]',
+    'a ;',
+    '@ ;',
+    'check pointer stuff, black token skip should leave pointer right behind the black token, not before the next black token'
+  ],
+  [
+    '{`a`}{`;`}[` `]',
+    'a; ;',
+    '@; ;',
+    'check pointer stuff, black token skip should leave pointer right behind the black token, not before the next black token'
+  ],
+
+  // seeking > >> < <<
+  [
+    '[WHITE]<[NEWLINE]',
+    'a;\nb;',
+    'a;@b;',
+    'jump back a white token',
+  ],
+  [
+    '[WHITE]>[NEWLINE]',
+    'a ;\nb;',
+    'a@;\nb;',
+    'jump over a black or white token',
+  ],
+  [
+    '[WHITE]>[NEWLINE]',
+    'a  \n;b;',
+    'a@ \n;b;',
+    'jump over a black or white token',
+  ],
+  [
+    '[WHITE]>>[NEWLINE]',
+    'a  \n;b;',
+    'a  \n;b;',
+    'jump over a black token (should fail as there is no black token to skip)',
+  ],
+  [
+    '[WHITE]>>[NEWLINE]',
+    'a ;\nb;',
+    'a@;\nb;',
+    'jump over a black token (space, semi, newline)',
+  ],
+  [
+    '{IDENTIFIER}{`;`}<<2{`foo`}',
+    'obj.foo ; bar;',
+    'obj.@ ; bar;',
+    'check token type for ident, check next token, jump back to confirm actual value of identifier',
+  ],
+
+  // fiddle with designators and seeks
+  [
+    '({`a`}{`.`}{`b`}{`;`}<)=0,1',
+    'a.b;',
+    '@.$;',
+    'should assign the second last index to 1, instead of the last'
+  ],
+  [
+    '({`a`}{`.`}{`b`}{`;`}<)=0,1|({`;`}{`c`})=,2',
+    'a.b;c',
+    '@.$@#',
+    'this wont work in AFTER mode if the index isnt moved back',
+    REPEAT_AFTER
+  ],
+  [
+    '({`a`}{`.`}{`b`}{`;`})=0,1|({`;`}{`c`})=,2',
+    'a.b;c',
+    '@.b$c',
+    'this wont work in AFTER mode because the index isnt moved back',
+    REPEAT_AFTER
+  ],
+  [
+    '({`a`}{`.`}{`b`}{`;`})=0,1|({`;`}{`c`})=,2',
+    'a.b;c',
+    '@.b@#',
+    'this wont work in AFTER mode if the index isnt moved back but would work in EVERY mode with COPY', // though less efficient
+    REPEAT_EVERY,
+    INPUT_COPY
+  ],
+  [
+    '{IDENTIFIER}{`;`}<<2{`a`}',
+    'a;',
+    '@;',
+    'conditional with seek back',
+  ],
+  [
+    '{IDENTIFIER}{`;`}<<2{`b`}',
+    'a;',
+    'a;',
+    'conditional with seek back, failing after seek',
+  ],
+  [
+    '({IDENTIFIER}{`;`}<<2{`a`})=0,1',
+    'a;',
+    '$;',
+    'conditional with seek back, checking range',
+  ],
+  [
+    '{IDENTIFIER}{`;`}<<2{`a`}{`;`}',
+    'a;',
+    '@;',
+    'scanning same token twice',
+  ],
+  [
+    '{IDENTIFIER}{`;`}<<2{`a`}{`b`}',
+    'a;',
+    'a;',
+    'scanning same token twice, failing the second time',
+  ],
+  [
+    '({IDENTIFIER}{`;`}<<2{`a`}{`;`})=0,1',
+    'a;',
+    '@$',
+    'scanning same token twice, check range',
+  ],
+
+
 
 
   // test that calls repeats (repeat or collect) but doesnt meet minimal quantity, trackback to another repeater...

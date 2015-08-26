@@ -130,7 +130,7 @@ function parse(query, hardcoded, macros) {
       afterQuantifier += ');\n';
       if (isTopLevelStart) afterQuantifier += '} // `]` '+currentCounter+' for a white token\n';
 
-      result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
+      result += (insideToken?'&& (':'{\n') + 'matchedSomething = true' + (insideToken?')':';\n');
       result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       result += (insideToken?'':'}\n');
     } else if (peek('{')) {
@@ -143,7 +143,7 @@ function parse(query, hardcoded, macros) {
       afterQuantifier += ');\n';
       if (isTopLevelStart) afterQuantifier += '} // `}` '+currentCounter+' for black token\n';
 
-      result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
+      result += (insideToken?'&& (':'{\n') + 'matchedSomething = true' + (insideToken?')':';\n');
       result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter);
       result += (insideToken?'':'}\n');
     } else if (peek('(')) {
@@ -151,7 +151,7 @@ function parse(query, hardcoded, macros) {
         result += '// - its a _nested_ group\n';
         beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, tokenGroupNumber, false) + ')';
 
-        result += (insideToken?'&&':'{\n') + '(matchedSomething = true)' + (insideToken?'':';\n');
+        result += (insideToken?'&& (':'{\n') + 'matchedSomething = true' + (insideToken?')':';\n');
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter, insideToken);
         result += (insideToken?'':'}\n');
       } else {
@@ -209,34 +209,78 @@ function parse(query, hardcoded, macros) {
       if (insideToken) reject('Tilde (~) only allowed outside of tokens');
 
       result +=
+        '// - its a tilde (~)\n'+
         '{\n'+
-        '  '+
         // note: before matching anything we wont seek and prevent the whole query preemptively
-        '// dont seek for leading ~, just wait for a non-spacy token\n'+
-        'if (' +
-        'GROPEN("~ seek"),'+
-        'LOG("~ seek() past spaces and tabs at all?", "matchedSomething=", matchedSomething, "start=", index),'+
-        'matchedSomething) {\n' +
-          '  '+
-          'if (isSpaceTabComment()) {\n'+
-            '    '+
-            'LOG("~ skipping spaces and tabs");\n'+
-            '    '+
-            'do LOG("skipping", tokens[index]),++index;\n' +
-            '    '+
-            'while (isSpaceTabComment());'+
-            ' // ~' +
-            '\n'+
-          '  '+
-          '}\n'+
-          '  ' +
-          'LOG(group'+tokenGroupNumber+'?"~ passed":"~ failed", "index="+index);\n'+
-          'GRCLOSE();\n'+
-        '}\n'+
-        'else GRCLOSE();\n' +
-        'group'+tokenGroupNumber+' = true; // the ~ seek passes regardless, there is no valid condition for failing\n'+
+        '  // dont seek for leading ~, just wait for a non-spacy token\n'+
+        '  if (' +
+          'GROPEN("~ seek"),'+
+          'LOG("~ consumeToBlack() past spaces and tabs at all?", "matchedSomething=", matchedSomething, "start=", index),'+
+          'matchedSomething) {\n' +
+        '    if (isSpaceTabComment()) {\n'+
+        '      LOG("~ skipping spaces and tabs");\n'+
+        '      do LOG("skipping", tokens[index]),++index;\n' +
+        '      while (isSpaceTabComment());'+
+        '      // ~\n'+
+        '    }\n'+
+        '    LOG(group'+tokenGroupNumber+'?"~ passed":"~ failed", "index="+index);\n'+
+        '    GRCLOSE();\n'+
+        '  }\n'+
+        '  else GRCLOSE();\n' +
+        '  group'+tokenGroupNumber+' = true; // the ~ seek passes regardless, there is no valid condition for failing\n'+
         '}\n'+
       '';
+    } else if (peek('>') || peek('<')) {
+      var symbol = peek();
+      ++pos;
+
+      // dont skip whitespace. this would allow you to explicitly skip white tokens without a number suffix
+      var forBlack = peek() === symbol;
+      if (forBlack) ++pos;
+
+      consumeWhites();
+      var peeked = peek();
+      var steps = 1;
+      if (peeked >= '0' && peeked <= '9') steps = parseNumbersAsInt();
+
+      if (!steps) reject('Cannot use `'+steps+'`; it is an illegal number for moving the pointer forward');
+      result += 'if (matchedSomething) {\n';
+      result += 'GROPEN("'+symbol+(forBlack?symbol:'')+' '+steps+'x, start index="+index, tokens[index]);\n';
+      if (forBlack) {
+        // need to seek explicitly
+        if (symbol === '<') { // <<
+          result +=
+            '// - its a black back skip (>>) for '+steps+'x\n' +
+            'for (var i=0; LOG("- <<", index), i<'+steps+'; ++i) {\n' +
+            '  --index;\n' + // put against next black token, dont skip if already black
+            '  rewindToBlack();\n'+ // now skip the token that must be black
+            '  LOG("- >>", tokens[index]);\n'+
+            '}\n'+
+            'LOG("- >> end pos=", index);\n'+
+            '';
+        } else { // >>
+          result +=
+            '// - its a black skip (>>) for '+steps+'x\n' +
+            'for (var i=0; LOG("- >>", index), i<'+steps+'; ++i) {\n' +
+            '  consumeToBlack();\n' + // put against next black token, dont skip if already black
+            '  next();\n'+ // now skip the token that must be black
+            '  LOG(tokens[index]);\n'+
+            '}\n'+
+            'LOG("- >> end pos=", index);\n'+
+          '';
+        }
+      } else {
+        // just forward the pointer
+        if (symbol === '<') {
+          result += '// - its a white back skip (<) for '+steps+'x\n';
+          result += 'if (matchedSomething) index = Math.max(index - '+steps+', 0);'
+        } else {
+          result += '// - its a white skip (>) for '+steps+'x\n';
+          result += 'if (matchedSomething) index = Math.min(index + '+steps+', tokens.length);'
+        }
+      }
+      result += 'GRCLOSE();\n';
+      result += '}\n';
     } else if (peek('^')) {
       // start of line, or start of file if another ^ follows
       if (insideToken) reject('Caret (^) only allowed outside of tokens');
@@ -254,7 +298,7 @@ function parse(query, hardcoded, macros) {
         result += 'group' + tokenGroupNumber + ' = (!index || isNewline(-1));';
         result += ' // ^\n';
       }
-      result += '(matchedSomething = true);\n';
+      result += 'matchedSomething = true;\n';
       result += 'GRCLOSE();\n';
       result += '}\n';
     } else if (peek('$')) {
@@ -276,7 +320,7 @@ function parse(query, hardcoded, macros) {
         result += '(group' + tokenGroupNumber + ' = (index >= tokens.length-1 || isNewline(0)));';
         result += ' // $\n';
       }
-      result += '(matchedSomething = true);\n';
+      result += 'matchedSomething = true;\n';
       result += 'GRCLOSE();\n';
       result += '}\n';
     } else if (optional) {
@@ -645,7 +689,7 @@ function parse(query, hardcoded, macros) {
       // no quantifier. dont wrap string.
       return beforeAssignments + parseAssignments() + afterAssignments;
     } else {
-      min = parseNumbers();
+      min = parseNumbersAsInt();
 
       if (!peek('.')) {
         max = min;
@@ -660,7 +704,7 @@ function parse(query, hardcoded, macros) {
         } else if (peeked < '0' || peeked > '9') {
           reject('expecting number after double dot');
         } else {
-          max = parseNumbers();
+          max = parseNumbersAsInt();
         }
       }
     }
@@ -718,7 +762,7 @@ function parse(query, hardcoded, macros) {
 
     return result;
   }
-  function parseNumbers() {
+  function parseNumbersAsInt() {
     var s = '';
     var p = query[pos];
     while (p >= '0' && p <= '9') {
