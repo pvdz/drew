@@ -1320,21 +1320,74 @@ var tests = module.exports = [
     'a\nb',
     'a\nb',
     'regression: caused infinite loop',
-  ]
+  ],
 
-// TODO
-//  [
-//    '[`x`]#[`y`]|[`z`]',
-//    'x + z;',
-//    'x + @;',
-//    'checking toplevel OR and backtracking on an early call'
-//  ],
+  [
+    '[`x`]#[`y`]|[`z`]',
+    'x + z;',
+    'x + @;',
+    'checking toplevel OR and backtracking on an early call'
+  ],
+
+  [
+    '{`a` | `b`}',
+    '',
+    '',
+    'query parser test',
+  ],
+  [
+    '{`a` & `b`}',
+    '',
+    '',
+    'query parser test',
+  ],
+  [
+    '{`a` & `b` | `c`}',
+    '',
+    '',
+    'query parser test',
+  ],
+  [
+    '{/foo/ & `b` | `c`}',
+    '',
+    '',
+    'query parser test',
+  ],
+
+  [
+    '{/^\\// & REGEX | PUNCTUATOR}',
+    ' // should not match this comment',
+    ' // should not match this comment',
+    '{a & b | c} matches c on first semi because a&b doesnt match',
+  ],
+  [
+    '{/^\\// & REGEX | PUNCTUATOR}',
+    ' /* should not match this comment */',
+    ' /* should not match this comment */',
+    '{a & b | c} matches c on first semi because a&b doesnt match',
+  ],
+  [
+    '{/^\\// & REGEX | PUNCTUATOR}',
+    ' /should match this regex/;',
+    ' @;',
+  ],
+  [
+    '{/^\\// & REGEX | PUNCTUATOR}',
+    ' foo;',
+    ' foo@',
+    'a&b|c, matches on c regardless of a&b'
+  ],
+  [
+    '{/^\\// & (REGEX | PUNCTUATOR)}',
+    ' foo;',
+    ' foo;',
+    'can use parens to disambiguate, a&(b|c) now the punc wont match because a wont match'
+  ],
 
 
   // test that calls repeats (repeat or collect) but doesnt meet minimal quantity, trackback to another repeater...
   // test that repetitive callback is not called until min repetitions are seen
   // test invert and backtracking
-  // test with logic operators in query vs in js (`a & b | c` should not lead to `c` if `!a`)
   // test to confirm the implicit callback is not called when quantified callbacks end and match the query
 
 // define macros first...
