@@ -44,8 +44,8 @@ These always go inside a token wrapper (`[]` or `{}`)
 - `` `...` `` = literal token value match (maybe with regex-like features like wildcards?). Only inside a token or group. Currently must match entire token value. Future plans to extend this syntax for partial/regex matches.
 - `` `...`i `` = same as literal token but with case insensitive match (will apply .toLowerCase() to either side first)
 - `TAB` = macros or constants. aliases for literals, other macros, or hardcoded constants, or any combination thereof. Each can only be used either inside or outside tokens. See section below. 
-- `|` = "or" `[A | B]` matches if it either matches criteria A or B. Can be used in and outside tokens.
-- `&` = "and" `[A & B]` matches if it matches criteria A and B. Can be used inside tokens. They are implied outside of tokens.
+- `|` = "or" `[A | B]` matches if it either matches criteria A or B. Can be used in and outside tokens. `&` and `|` are processed left to right, same strength. Use parens to disambiguate.
+- `&` = "and" `[A & B]` matches if it matches criteria A and B. Can be used inside tokens. They are implied outside of tokens. `&` and `|` are processed left to right, same strength. Use parens to disambiguate.
 - `()` = group criteria ``[SPACE | (ARG & `foo`)]`` or tokens.
 - `*` = assert any one token. do not apply any other matching criteria (could be used together with other conditions, but why would you). Used to skip one token unconditionally.
 - `!` = negate the next matching condition or group: `[!SPACE]` (you dont need peek, you can add multiple conditions for the same token with `&` and `|`). Only inside tokens.
@@ -227,13 +227,6 @@ The first argument (or named `0` key if an object) is implicitly created/passed 
 - Early callbacks clear the implicit zero too, it will be set as if the match started after encountering the pound sign
  - `{X}#{Y}` First callback will have first parameter set to `X` token, second call will have first parameter set to `Y` token.
 
-## Comments
-
-Use colon-comments to clarify certain args
-
-- `{X} =1 :the x`
-- `{X} =1 :the x {Y} =2 :the rest`
-
 ## Args as object
 
 If the name of at least one arg isn't a positive integer, the callback will receive one object with one key for every arg.
@@ -244,6 +237,13 @@ You can access "invalid" identifiers with dynamic properties: `obj['0_foo']`
 - `{X}=the_x`
 - `{X}=the_x {Y}=the_rest` -> The `the_rest` key becomes the `Y` token
 - `{X}=0abx {Y}=2def :can  start with number` -> The keys can start with a number (unlike regular identifiers in JS)
+
+# Comments
+
+Use colon-comments to clarify certain args or add a description. Colon comments run from the colon to the first next `({[`.
+
+- `{X} =1 :the x`
+- `{X} =1 :the x {Y} =2 :the rest`
 
 # Early callbacks
 
