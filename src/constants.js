@@ -1,5 +1,5 @@
 // hardcoded conditions (symbol translates to the actual JS that you see)
-// all constants are wrapped in parens, so dont worry about that. (or do)
+// code is injected as is wrapped in parenthesis. so 'type(STRING)` -> (type(STRING))
 
 var constants = module.exports = {
   // token type name vars (as governed and exposed by zeparser)
