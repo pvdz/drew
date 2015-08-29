@@ -11,63 +11,147 @@ Drew is a DSL designed to make rewriting easier. It's main source inspiration ar
 
 # Language CFG
 
-atoms: `atom` | `atom | atoms`
-atom: 'white-token | black-token | token-group | early-call | condition-group | line-atom
-line-atom: `'^^'` | `'^'` | `'$'` | `'$$'` | `'~'`
-white-token: `'[' conditions ']' [quantifier] [assignment]`
-black-token: `'{' conditions '}' [quantifier] [assignment]`
-token-group: `(atom)` | `(atom | atoms)`
-early-call: `'#' designator [comment]`
-condition-group: `'(' conditions ')'`
-quantifier: `n` | `n '..' m` | `n '...'` | `'*'` | `'?'` | `'+'`
-assignment: `'=' designator [comment]`
-comment: `':' comment-chars-or-whitespace`
-designator: `designator-chars`
-conditions: `condition` | `condition '|' conditions` | `condition '&' condition` | `'!' condition`
-condition: `literal` | `condition-group` | `macro`
-literal: ``'`' any-but-backslash | escape '`'``
-escape: `'\' char`
-macro: `identifier`
+- atoms: `atom` | `early-call` | `atom atoms`
+- atom-complete: `atom` [`quantifier`] [`explicit-call`] [`designator-comment`]
+- atom: `white-token` | `black-token` | `atom-group` | `line-boundary` | `seek`
+- line-boundary: `'^^'` | `'^'` | `'$'` | `'$$'`
+- white-token: `'['` `conditions` `']'` 
+- black-token: `'{'` `conditions` `'}'` 
+- atom-group: `'('` `atoms` `')'` 
+- early-call: `'#'` [`designator-comment`]
+- quantifier: `digits` | `digits` `'..'` `digits` | `digits` `'...'` | `'...'` `digits` | `'*'` | `'?'` | `'+'`
+- digits: `digit` | `digits`
+- digit: `'0'` | `'1'` | `'2'` | `'3'` | `'4'` | `'5'` | `'6'` | `'7'` | `'8'` | `'9'`
+- designators: `'='` `designator-comment` [`comma-designator-comment`] | `'='` `comma-designator-comment`
+- comma-designator-comment: `','` `designator-comment`
+- designator-comment: `designator` [`comment`] 
+- comment: `':'` `any-non-ambiguous-chars` // tbd
+- designator: any combination of numbers and letters
+- conditions: `condition` | `condition` `'|'` `conditions` | `condition` `'&'` `conditions` | `'!'` `condition`
+- condition-group: `'('` `conditions` `')'` // tbd: !(x) is a loop :(
+- condition: `literal` | `condition-group` | `macro` | `regex`
+- literal: ``'`'`` `literal-unit` ``'`'`` [``'`'`` `'i'` ``'`'``] 
+- literal-unit: any character except backslash | `escape`
+- escape: `'\'` `one-character`
+- macro: `any combination of letters`
+- seek: `seek-type` [`digits`]
+- seek-type:`'<'` | `'<<'` | `'>'` | '`>>'` | `'~'`
+
+# Atoms
+
+An atom is either a token match or a group. More exotic are the line boundary symbols or seeks, but generally when we're talking about an atom we mean either the token condition or a group of them.
 
 # Tokens
 
 All tokens in a query should be wrapped in `[]` or `{}`. You'll probably end up using `{}` mostly.
 
 - `[matching criteria]` = start matching at the next white token
-- `{matching criteria}` = start matching at the next non-white token (skips any white tokens when matching)
-- `(matching criteria)` = white or non-white is determined by the first token-criteria of the group
+- `{matching criteria}` = start matching at the next non-white token which we call "black". This skips any white tokens when finding the token to start matching
+- `(matching criteria)` = groups atoms and only "matches" when the query it wraps matches
 
-# Matching criteria
+# Split
+
+In the next examples the function `split()` is used to chunk a string up in tokens. One token per character. Only spaces, tabs, and newlines become "WHITE" tokens, other characters are BLACK. They get the same "type".
+
+The function should be available to you as well so you can experiment. Normally you would use this library on the result of an actual parser and most tokens are not a single character.
+
+# Matching conditionals
 
 These always go inside a token wrapper (`[]` or `{}`)
 
-- `` `...` `` = literal token value match (maybe with regex-like features like wildcards?). Only inside a token or group. Currently must match entire token value. Future plans to extend this syntax for partial/regex matches.
+- Backticked text is quoted literals. `` `foo` `` = literal token value match for `foo`. Only inside a token or group. Must match entire token value. See regex for partial match.
+
+```
+run(split('foo'), '[`f`][`o`][`o`]', func, 'once', 'nocopy');
+run(split('foo'), '[/^foo$/]', func, 'once', 'nocopy'); // same
+``` 
+ 
 - `` `...`i `` = same as literal token but with case insensitive match (will apply .toLowerCase() to either side first)
-- `TAB` = macros or constants. aliases for literals, other macros, or hardcoded constants, or any combination thereof. Each can only be used either inside or outside tokens. See section below. 
-- `|` = "or" `[A | B]` matches if it either matches criteria A or B. Can be used in and outside tokens. `&` and `|` are processed left to right, same strength. Use parens to disambiguate.
-- `&` = "and" `[A & B]` matches if it matches criteria A and B. Can be used inside tokens. They are implied outside of tokens. `&` and `|` are processed left to right, same strength. Use parens to disambiguate.
-- `()` = group criteria ``[SPACE | (ARG & `foo`)]`` or tokens.
+
+```
+run(split('foo'), '[`Foo`i]', func, 'once', 'nocopy');
+run(split('foo'), '[/^foo$/i]', func, 'once', 'nocopy'); // same
+``` 
+
+- `TAB` = (any identifier as-is) are macros or constants. see macros.js and constants.js. They are aliases for literals, other macros, hardcoded constants, or any combination thereof. Each can only be used either inside or outside tokens, depending on their definition. See related section below.
+
+```
+run(split('a \t b'), '[`a`][SPACE][TAB][SPACE][`b`]', func);
+```
+
+- `|` = "or"; `[A | B]` matches as a whole when either criteria A or B matches individually (lazy eval). Can be used in and outside tokens. `&` and `|` are processed left to right, same strength. Use parens to disambiguate as they have no precedence over each other.
+
+```
+run(split('aabbababbaaab'), '[`a`]|[`b`]', func);
+run(split('aabbababbaaab'), '[/(a|b)+/]', func);
+```
+
+- `&` = "and"; `[A & B]` matches as a whole when both criteria A and B match. Can be (should be) used inside tokens. They are implied outside of tokens so you shouldn't need them there. `&` and `|` are processed left to right, same strength. Use parens to disambiguate as they have no precedence over each other.
+
+```
+run(split(' a\ta'), '[WHITE & TAB][`a`]', func); // only matches second a
+```
+
+- `()` = group criteria ``[SPACE | (ARG & `foo`)]`` or atoms
+
+```
+run(split(' b\ta a\tb'), '([WHITE & TAB][`a`]) | ([WHITE][`b`])', func);
+```
+
 - `*` = assert any one token. do not apply any other matching criteria (could be used together with other conditions, but why would you). Used to skip one token unconditionally.
+
+```
+run(split('abc'), '[`a`][*][`c`]', func);
+```
+
 - `!` = negate the next matching condition or group: `[!SPACE]` (you dont need peek, you can add multiple conditions for the same token with `&` and `|`). Only inside tokens.
+
+```
+run(split('abc'), '[`a`][!a & !c][`c`]', func);
+```
+
 - `/regex/flags` = a normal (JS) regular expression to apply to the whole value of the (one!) token (-> `token.value.test(/foo/)`).
+
+```
+run(split('abc'), '[/a[^ac]c/]', func);
+run(split('abc'), '[`a`][!a & !c][`c`]', func); // same
+```
 
 # Matching with Regular Expression
 
 Use this for partial matches.
 
-- This is relatively slow (because regular expressions are relatively slow in JS).
-- Note that you must use the `^` and `$` chars to make the whole regex match the whole token, otherwise a partial match also passes
-- Regular backslash rules apply.
-- Only the `i` flag is valid, other flags would be useless (due to the way `.test()` works)
+```
+run(split('abc'), '[/a[^ac]c/]', func);
+// same as
+run(split('abc'), '[`a`][!a & !c][`c`]', func);
+// same as: matching an a and c with anything except a or c in between them
+```
+
+- Translates directly to doing `regex.test(token.value)`, as is.
+- This is relatively slow (only because regular expressions are relatively slow in JS).
+- Note that this is will do a partial match by default. You must use the `^` and `$` chars to make sure the whole regex match the whole token.
+- Regular backslash rules apply, not double like you'd do in a string.
+- Only the `i` flag is valid, other flags would be useless (due to the way `.test()` works). Other flags in the query will trigger a parse error.
 
 # Start or end of line or file
 
 This is the `line-atom` rule. These special tokens (no wrapper allowed) are used to match the start or end of a line or file.
 
-- `^`: Match start of line or file. Checks whether previous token is a newline or has index 0.
-- `^^`: Match start of file. Checks whether current token has index 0
-- `$`: Match end of line or file. Checks whether next token is a newline or is EOF.
-- `$$`: Match end of file. Checks whether next token is EOF.
+```
+run(split('abc\ndef\nghi'), '^^[`a`][`b`][`c`]', func); // matches start
+run(split('abc\ndef\nghi'), '^^[`d`][`e`][`f`]', func); // no match
+run(split('abc\ndef\nghi'), '^[*][*][*]', func); // matches all three
+run(split('abc\ndef\nghi'), '^[*][*][*]$', func); // matches all three
+run(split('abc\ndef\nghi'), '[*][*][*]$', func); // matches all three
+run(split('abc\ndef\nghi'), '[`g`][`h`][`i`]$$', func); // matches end
+run(split('abc\ndef\nghi'), '[`d`][`e`][`f`]$$', func); // no match
+```
+
+- `^`: Match start of line or file. Checks whether previous (white) token is a newline or whether current has index 0.
+- `^^`: Match start of file. Checks whether current token has index 0.
+- `$`: Match end of line or file. Checks whether _next_ (white) token is a newline or is EOF.
+- `$$`: Match end of file. Checks whether _next_ (white) token is EOF.
 
 Obviously the symbols are chosen to match regular expressions. These symbols will not consume the token they match. 
 
@@ -75,41 +159,77 @@ None of these influence the start or end index of a match directly (in particula
 
 Use the `~` (see lower) to seek to the next black token OR newline token.
 
+```
+run(split('abc    \n    def'), '[`a`][`b`][`c`]$', func); // no match
+run(split('abc    \n    def'), '[`a`][`b`][`c`]~$', func); // matches
+run(split('abc    \n    def'), '^[`d`][`e`][`f`]', func); // no match
+run(split('abc    \n    def'), '^~[`d`][`e`][`f`]', func); // matches
+```
+
+I intend for the user to be able to define which tokens `~` should skip, like spaces and tabs in plain text, but spaces, tabs, comments, and perhaps also ASI's in JavaScript. Various languages may have their own needs. This is hard to generalize. Perhaps I should make this read from a MACRO instead... (tbd)
+
 # Literal escaping
 
-Use a backspace to escape a few things in literals
+Use a backslash to escape a few things in literals (backtick quoted text)
 
-- backspace `foo\\bar`
-- backtick ``foo\`bar``
-- unicode escape `\uNNNN` where `NNNN` is a four digit hexadecimal number representing a unicode code point (TBD: 6 digits?)
-- hex escape `\xNN`, a two digit hexadecimal number representing a unicode code point
+- backslash: `` `foo\\bar` ``
+- backtick: `` `foo\`bar` ``
+- unicode escapes 4 digits: `` `foo\uNNNNbar` `` where `N` is a hexadecimal digit. This basically translates to `String.fromCharCode(parseInt(NNNN, 16))`.
+- unicode escapes 6 digits: `` `foo\wNNNNNNbar` `` (`\w` is for "wide") where `N` is a hexadecimal digit. This basically translates to `String.fromCharCode(parseInt(NNNNNN, 16))`.
+- hex escape `` `foo\xNNbar` ``, a two digit hexadecimal number representing a unicode code point.
 - Right now any other character will be encoded as-is but that may change to a more restrictive check.
 
 # Groups
 
 - Tokens can be grouped with `()`
-- Matching criteria can be grouped ``[SPACE | (ARG & `foo`)]``
+- They can have the same suffixes as single token conditions (quantifiers, designators, etc)
+- They are considered an atom as a group
+
+```
+run(split('ababababc'), '([`a`][`b`])+[`c`]', func);
+```
+
+- Matching criteria (inside tokens) can be grouped too
+
+```
+[SPACE | (ARG & `foo`)]
+```
 
 # Whitespace
 
-Nearly all whitespace in a query is insignificant and completely ignored. Exceptions are:
+Nearly all whitespace in a query is insignificant and completely ignored.
+ 
+Exceptions:
+
+- Whitespace in a literal is significant
+
+Whitespace is not allowed between:
+
 - Whitespace in a literal
+- A literal or regular expression and its flag
 - Characters of the same identifier
 - Digits of the same number
+- Characters of an operator (`<<` `>>` `...` `^^` `$$`)
+
+Whitespace is user configurable since it depends per language. You'll probably want to override this in the macro for your language of choice.
+
+For text in `split()` it is predefined to "invisible" characters, or more specific the spaces, tab (0x9), vtab (0xb), newlines (0xa and 0xd), but this is defined in a macro. 
 
 # Operator precedence
 
-Operator precedence of `&` and `|` is rtl, both have same prio, lazy eval. Important examples: 
+Operator precedence of `&` and `|` is right-to-left, both have same prio, lazy eval. Important examples:
+
 - `true | foo()` does not evaluate `foo()` because it already knows it can pass ("lazy evaluation"). 
 - `true & false | true` will evaluate to `false`, as the `&` will fail.
 - `(true & false) | true` will evaluate to `true`, as the parenthesis cause the second `|` to be checked as well, now.
 
 In JS `X && Y || Z` actually is the same as `(X && Y) || Z`, but in this spec `X & Y | Z` really means `X & (Y | Z)`.
 This precedence is enforced by simply wrapping everything after each operator in parenthesis while translating:
+
 - `X | Y & Z` always becomes `X || (Y && Z)` in JS.
 - `X & Y | Z` always becomes `X && (Y || Z)` in JS.
 
-Operator precedence of `!` is over the first next condition or group. Use a group to apply it to multiple criteria.
+Operator precedence of `!` is over the first next atom. Use a group to apply it to multiple atoms.
 - `[!X | Y]` means a token that's not X or that is Y
 - `[!(X | Y)]` means a token that's not X nor Y
 
@@ -117,30 +237,55 @@ The line ops `^` `^^` `$` `$$` and `~` have the same precedence as regular token
 
 # Colon-comments
 
-In this spec, a colon-comment is a colon followed by alpha-numeric characters, dashes, underscores, (dollar signs ?? TBD), and whitespace until the first character that doesn't match this criteria.
-It is only used in places where a comment makes sense and cannot lead to ambiguity (so outside of token wrappers, where identifiers are not allowed in arbitrary positions).
+In this spec, a colon-comment is a colon followed by any character that's not ambiguous to the start of an atom. At the time of writing that's `[{(`. 
+
+They're only valid after atoms and explicit calls (`#`).
 
 - `[X]=1: this is the second argument [Y]=2 : and this is the third` 
 
 # Designators
 
-In this spec, an designator is a regular identifier in JS extended by the possibility to start with a number as well (TBD: and maybe dashes). There's no syntactical situation where this leads to ambiguity.
-They are used to define callback arguments and callback names. They bind to the closest group or single atom only. 
+In this spec, a designator is a regular identifier in JS extended by the possibility to start with a number as well. There's no syntactical situation where this leads to ambiguity since this syntax has no calculation expressions so there are not many places where such numbers are allowed.
+
+They are used to map a token start/stop index to the callback arguments index or name. They bind to the last atom only.
+ 
+```
+run(split('ababababc'), '([`a`][`b`])', function(start){}); // only 0 is set (implicitly)
+run(split('ababababc'), '([`a`][`b`])=0,1', function(start, stop){});
+run(split('ababababc'), '([`a`][`b`])=,1', function(start, stop){}); // 0 is set implicitly
+run(split('ababababc'), '([`a`][`b`])=start,stop', function(obj){ obj.start, obj.stop; }); // non-ints result in one obj
+run(split('ababababc'), '([`a`][`b`])=start,1', function(obj){ obj.start, obj[1]; }); // even when mixed
+run(split('ababababc'), '([`a`][`b`])=0start,1stop', function(obj){ obj[0start], obj[1start]; }); // names can start with numbers (unusual in coding)
+```
 
 # Quantifiers
 
-Quantifiers quantify tokens and token-groups in a regex-esque fashion. They can trigger callbacks for individual matches within the quantifier.
-A quantifier only quantifies over the token or group that immediately precedes it, never more.
+Quantifiers quantify atoms in a regex-esque fashion. They can have a suffix which triggers callbacks for individual matches within the quantifier as well.
+
+A quantifier only quantifies the previous atom, never more. Though of course this atom can be a group.
 
 ## Syntax
 
 Quantifiers go immediately after the token/group wrapper and before the assignments or pound.
 
+- `[X]8` = X must occur 8 times. Same as regex `{8}`
 - `[X]1..3` = X must occur at least 1 and at most 3 times. Same as regex `{1,3}`
 - `[X]5...` = X must occur at least 5 times, no upper bound. Same as regex `{5,}`
+- `[X]...5` = X must occur at most 5 times, maybe less. Same as regex `{,5}`
 - `[X]*` = X can have any number of occurrences, same as regex, same as `0...`
 - `[X]+` = X must occur at least once, same as regex, same as `1...`
 - `[X]?` = X must occur at most once, same as regex, same as `0..1`
+
+```
+run(split('abaabaaac'), '[`a`]', func, 'after'); // six matches
+run(split('abaabaaac'), '[`a`]2', func, 'after'); // one match
+run(split('abaabaaac'), '[`a`]2..3)', func, 'after'); // two matches
+run(split('abaabaaac'), '[`a`]...3', func, 'after'); // three matches
+run(split('abaabaaac'), '[`a`]2...', func, 'after'); // two matches
+run(split('abaabaaac'), '[`a`]*', func, 'after'); // nine matches (empty string is also a match here)
+run(split('abaabaaac'), '[`a`]?', func, 'after'); // nine matches (empty string is also a match here)
+run(split('abaabaaac'), '[`a`]+', func, 'after'); // three matches
+```
 
 ## Callback suffix
 
@@ -155,65 +300,70 @@ These callback signifiers are suffixed to the quantifier and can trigger the cal
  - `[X][Y]*%=a,b` on `'xxxyyyy'` -> run callback once, 0 = 2, a = [3,4,5,6] and b = [3,4,5,6]   
  - `[X][Y]*%=a` on `'xxxyyyy'` -> run callback once and collect pairs of ranges on the single param, 0 = 2, a = [3,3,4,4,5,5,6,6]
 
+For each of these examples func is called with one object
+(Note that `[y]1` is the same as `[y]`! Without quantifier a token should match once.)
+
+```
+run(split('xxxyyyy'), '[`x`][`y`]1=a,b', func, 'after');
+// obj.a is the first y, obj.b the last y
+
+run(split('xxxyyyy'), '[`x`][`y`]1@=a,b', func, 'after');
+// called 4 times, each time obj.a is equal to obj.b, once for each y
+// for each call, obj[0] is the first x (because implicit)
+
+run(split('xxxyyyy'), '[`x`][`y`]*%=a', func, 'after');
+// called once with {0:first x token, a:[3,3,4,4,5,5,6,6]} (start/stop of each step of quantified atom)
+
+run(split('xxxyyyy'), '[`x`][`y`]*%=a,b', func, 'after');
+// called once with {0:first x token, a:[3,4,5,6], b: [3,4,5,6]}
+```
+
 ## Queue
 
 Callbacks are stored in a queue while applying the query. Only if the entire rule matches the queued callbacks will trigger in order of registering them.
 
 Multiple quantifiers in the same query can trigger callbacks. 
-Multiple callbacks will trigger in order of encountering while matching (so not necessarily the rtl-order in the query).
+Multiple callbacks will trigger in order of encountering while matching (so not necessarily the order of appearance in the query).
 One callback suffix can invoke multiple series of callback when nested in another quantifier that matches multiple times. They are simply queued.
 Arguments are not cleared between these calls so last seen assignments are passed on before and after other quantifier callbacks.
 
 - `[X][Y]*@[X][Z]*@` on `xxxxyyxxxzzz` -> queues 5 callbacks, 2 for `y` and 3 for `z`. Note the extra callback for the entire match. 
 - `[X][Y]*@[X][Z]+@` on `xxxxyyxxx` -> queues 2 callbacks, but does not trigger them because there is no `z` and at least one was required.
 
-# Assignments
+# Designate tokens to arguments
 
-You can determine which tokens to receive as which parameters of the callback, or as keys in an object passed on to the callback
-Assignments go after the quantifiers and pound.
+The query syntax allows you to assign certain matched tokens to arguments of the callback function. You can choose whether these tokens are assigned directly to an argument index (and which), or you can have a single argument which is an object that contains one key for each designator you've used. Either way each argument or property will contain the matched token.
 
 ## Syntax
 
-The assignment starts with an equal sign (`=`). 
+The settuping up a designator starts with an equal sign (`=`). These can follow after the optional quantifier of any atom and without quantifier directly after the atom. 
 
-- It is either followed by:
- - a designator, optionally followed by a colon-comment or
- - a comma which must be followed by a(nother) designator, optionally followed by a colon-comment
+You can assign the start and end of the match of an atom (the end being relevant in a group or complex macro).
 
-- Examples:
- - `[X]=1` => put x in second parameter (0 being the first)
- - `[STATEMENT]=1,2` => put first token of statement in second param, last token of statement in third param 
- - `[STATEMENT]=,5` => only put last token of statement in sixth param (ignore start) 
- - `[STATEMENT]=1:start of statement` => colon-comment
- - `{X}1..2=a,b` => Assignments always go _after_ (optional) quantifiers
+```
+// assign start of a quantified match to the first argument
+run(split('xxxxyyyyy'), '[`x`]+=0', function (xStart){ log(xStart); }, 'after');
+// assign last token of quantified match to the first argument
+run(split('xxxxyyyyy'), '[`x`]+=,0', function (xStart){ log(xStop); }, 'after');
+// assign first and last token
+run(split('xxxxyyyyy'), '[`x`]+=0,1', function (xStart, xStop){ log(xStart, xStop); }, 'after');
 
-- Callback examples
- - `[X][Y][EXPRESSION]=1{Z}=,2` -> `func(X, EXPRESSION, Z)`
- - `[X] [Y] [EXPRESSION]=expr_start {Z}=2_doo` -> `func({0:X, expr_start:EXPRESSION, '2_doo':Z})`
+// or as an object
 
-Duplicate declarations override their previous declarations. Only parts of a query that are part of the match are eligble to declare or override anything. Parts that don't contribute to the match (due to back tracking) will not declare nor clobber anything.
-
-## Overriding
-
-You can use the same designator multiple times in the same query. The last seen value for a certain designator before a callback is queued will be the one that will be passed on to it.
- 
-- `[X]=1 [Y]=1` -> The second arg will be the `Y` token because it was overridden.
-- `[X]=1 [Y]?=1` -> The second arg will be `Y` if it was found, otherwise it will be `X`
-
-## No match
-
-If a certain part does not match and was optional, it will ignore the assignment part, passing on `undefined` or the previous assigned value.
-
-- `[X]?=1` -> The second arg will be the `X` token if it was found, `undefined` otherwise.
-- `[X]=1 [Y]?=1` -> The second arg will be `Y` token if it was found, otherwise it will be the `X` token
-- `[X][Y]?=0` -> The first arg will be the `Y` token if it was found, otherwise it will be the `X` token (implicitly set when not assigned)
+// assign start of a quantified match to the first argument
+run(split('xxxxyyyyy'), '[`x`]+=a', function (obj){ log(obj.a); }, 'after');
+// assign last token of quantified match to the first argument
+run(split('xxxxyyyyy'), '[`x`]+=,b', function (obj){ log(obj.b); }, 'after');
+// assign first and last token to props with number starting names
+run(split('xxxxyyyyy'), '[`x`]+=0a,1b', function (obj){ log(obj['0a'], obj['1b']); }, 'after');
+```
 
 ## Implicit start of match
 
 The first argument (or named `0` key if an object) is implicitly created/passed on unless overridden.
 
 - By default the first argument is the start of the match (if no `'0'` key was requested, it is always created and set to the start, but you can override this)
- - `({X}{Y})=5` -> puts `X` token into fifth argument (and the start into the first argument)
+ - `({X}{Y})=5` -> puts `X` token into sixth argument (and the start into the first argument)
  - `{X}{Y}=0` -> puts `Y` token as first argument
  - `{X}{Y}=1{Z}=2` -> callback gets X Y Z as arguments in that order
  - `{X}({Y}{Z})=0,1` -> first param is Y, second param is Z
@@ -221,11 +371,33 @@ The first argument (or named `0` key if an object) is implicitly created/passed 
 - Early callbacks clear the implicit zero too, it will be set as if the match started after encountering the pound sign
  - `{X}#{Y}` First callback will have first parameter set to `X` token, second call will have first parameter set to `Y` token.
 
+## No match
+
+If a certain part does not match and was optional, it will ignore the designator part.
+
+- `[X]?=1` -> The second arg will be the `X` token if it was found, `undefined` otherwise.
+- `[X]=1 [Y]?=1` -> The second arg will be `Y` token if it was found, otherwise it will be the `X` token
+- `[X][Y]?=0` -> The first arg will be the `Y` token if it was found, otherwise it will be the `X` token (implicitly set when not assigned)
+
+## Overriding
+
+You can use the same designator multiple times in the same query. The last seen value for a certain designator before a callback is queued will be the one that will be passed on to it.
+
+Only parts of a query that are part of the match are eligible to declare or override anything. Parts that don't contribute to the match (due to backtracking) will not declare nor clobber anything.
+ 
+- `[X]=1 [Y]=1` -> The second arg will be the `Y` token because it was overridden.
+- `[X]=1 [Y]?=1` -> The second arg will be `Y` if it was found, otherwise it will be `X`
+
+You can override the `0` like anything else.
+
 ## Args as object
 
-If the name of at least one arg isn't a positive integer, the callback will receive one object with one key for every arg.
+If the name of at least one matched designator isn't a positive integer the callback will receive one object with one key for every designator.
+
 This is handled automatically.
-The object will have an implicit `0` key with the token of the start of the match unless overridden.
+
+The object will have an implicit `0` key with the token of the start of the match or explicit when overridden.
+
 You can access "invalid" identifiers with dynamic properties: `obj['0_foo']`
 
 - `{X}=the_x`
@@ -264,7 +436,7 @@ Sometimes you may want to manipulate the pointer directly. You can use `>` or `<
 - `<` = move the pointer before the previous white token
 - `<<` = move the pointer back to before the first previous black token
 
-These skips are unconditionally. So if you want to skip 5 tokens but there are only 3 to skip, the match doesn't fail. The pointer will simply be at the start or end.
+These skips are unconditional. So if you want to skip 5 tokens but there are only 3 to skip, the match doesn't fail. The pointer will simply be at the start or end.
 
 When used at the start of a query they are ignored so effectively useless... (use backjumps after matching something for the same effect)
 
