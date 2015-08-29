@@ -57,7 +57,13 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
     GROPEN('Applying query starting at '+(copiedInput?'(c) ':'')+'token %d / %d: %o ->', index, stopTokenIndex, (copiedInput ? copiedInput[index] : tokens[index].value), tokens[index]);
     var lastIndex = check(index, handler, copiedInput);
 
-    if (!repeatMode || repeatMode === 'once') {
+    if (lastIndex === true && copyInputMode === 'copy') WARN('Callback returned true but input mode is copy so not restarting from same');
+
+    if (lastIndex === true && copyInputMode === 'nocopy') {
+      // handler return true at least once, restart from same index if input mode is nocopy
+      // (if copyInputMode=copy, starting from the same token would most likely mean loop)
+      WARN('Callback returned true at least once, restarting from same token');
+    } else if (!repeatMode || repeatMode === 'once') {
       if (lastIndex) {
         WARN('Found match ['+lastIndex+'], stopping search because repeatMode=once');
         GRCLOSE();
@@ -358,6 +364,8 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     if (argPointers.length !== 0) throw 'Expecting argPointers to be emtpy after a query';
     if (callPointers.length !== 0) throw 'Expecting callPointers to be emtpy after a query';
 
+    var explicitTrue = false;
+
     var returnValue = true;
     if (matched) {
       LOG('Queue implicit match call?', tokensMatched.slice(0),'->',tokensMatched[tokensMatched.length-1] !== EARLY_CALL);
@@ -369,9 +377,14 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
         // TOFIX: %
         var args = flushArgs(args); // may return null
 
-        if (!args) handler(token(start));
-        else if (nonIntKeys) handler(args);
-        else handler.apply(undefined, args);
+        // if the handler returns `true`, the next match should start on the same index regardless
+        if (!args) {
+          if (handler(token(start)) === true) explicitTrue = true;
+        } else if (nonIntKeys) {
+          if (handler(args) === true) explicitTrue = true;
+        } else {
+          if (handler.apply(undefined, args) === true) explicitTrue = true;
+        }
       });
 
       // last token evaluated by query
@@ -386,6 +399,7 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     callStack.length = 0;
     tokensMatched.length = 0;
 
+    if (explicitTrue) return true;
     if (repeatMode === 'once' || repeatMode === 'after' || repeatMode === 'every') return returnValue;
     throw 'unknown repeatMode: '+repeatMode;
   }
