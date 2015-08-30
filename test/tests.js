@@ -1590,7 +1590,7 @@ var tests = module.exports = [
     '({`{`|`;`}{CURLY_PAIR}=0,1) :eliminate empty blocks | ([NEWLINE]~[NEWLINE])=2,3 : eliminate empty lines, the tilde skips all non-newline whites, make sure 3 is not the last newline so one newline survives',
     '// result after comment elimination example\nfunction query(){\n  \n  \n  \nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n\n\n{\nmatchedSomething = true;\n{ \n\ngroup0 = checkTokenBlack(symb() \n\n\n&& (matchedSomething = true) && checkConditionGroup(symgc()\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))\n, \'0\', \'1\');\n} \n}\n\n\n\n}\n\n  \n  return group0;\n}\n',
     '',
-    'index is not being reset so the newlines dont match',
+    'regression: index is not being reset so the newlines dont match',
     REPEAT_EVERY,
     INPUT_COPY
   ],
@@ -1603,7 +1603,41 @@ var tests = module.exports = [
     INPUT_COPY
   ],
 
-
+  [
+    '(>(>))[`x`]',
+    '  x',
+    '  1', // if multiple 1's or higher numbers, the callback triggered more than once
+    'should trigger a match only once and ignore the > symbols',
+    REPEAT_ONCE,
+    INPUT_NO_COPY,
+    function(t){t.value = (t.value|0)+1; },
+  ],
+  [
+    '((>|[`x`])[`;`])=0,1',
+    '  x;',
+    '  x$', // >; matches first so match starts at ;
+    'should trigger a match only once and ignore the > symbols',
+    REPEAT_EVERY,
+    INPUT_NO_COPY,
+  ],
+  [
+    '(([`x`]|>)[`;`])=0,1',
+    '  x;',
+    '  @$', // x; matches first so match starts at x
+    'should trigger a match only once and ignore the > symbols',
+    REPEAT_EVERY,
+    INPUT_NO_COPY,
+  ],
+  [
+    '((>|[`x`])~[`;`])=0,1',
+    'x    ;',
+    'x    ;', // >; matches first so match starts at ;
+    // the `>~;` query should start at ; but the `x~;` should start at x
+    // the x start should therefor match first
+    'should match at x, refutes that "matchedSomething" can be determined at compile time, unless we tear it apart...',
+    REPEAT_ONCE,
+    INPUT_NO_COPY,
+  ],
 
   // test that calls repeats (repeat or collect) but doesnt meet minimal quantity, trackback to another repeater...
   // test that repetitive callback is not called until min repetitions are seen
