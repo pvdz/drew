@@ -21,7 +21,7 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
   }
 
   if (!startTokenIndex) startTokenIndex = 0;
-  if (!stopTokenIndex) stopTokenIndex = tokens.length-2;
+  if (!stopTokenIndex) stopTokenIndex = Math.max(0, tokens.length-2);
   if (!repeatMode) repeatMode = 'once'; // once, after, every
   if (!copyInputMode) copyInputMode = 'nocopy'; // copy, nocopy
 
