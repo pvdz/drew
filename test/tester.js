@@ -12,9 +12,9 @@ var targetTestIndex = -1;
 if (targetTestIndex >= 0) VERBOSE = true, console.warn('only running test', targetTestIndex);
 else VERBOSE = false;
 
-for (var i=0; i<tests.length; ++i) {
+for (var i=0; i<tests.js.length; ++i) {
   if (targetTestIndex < 0 || targetTestIndex === i) {
-    one(tests[i], i);
+    one(tests.js[i], i);
   }
 }
 
