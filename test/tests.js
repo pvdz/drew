@@ -388,6 +388,12 @@ var tests = module.exports = [
     'range in macro'
   ],
   [
+    '(ADDITION|(ADDITION))=0,1',
+    'var a = 1 + 2;',
+    'var a = @ + $;',
+    'toplevel grouped macro edge case'
+  ],
+  [
     '(ADDITION)=1,0',
     'var a = 1 + 2;',
     'var a = $ + @;',
