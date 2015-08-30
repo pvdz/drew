@@ -4,8 +4,6 @@ var VERBOSE = true;
 var VERBOSEMAX = 5000;
 
 // note: these three cannot use numbers as values.
-var REPEAT_FROM_SAME_TOKEN = false;
-var QUERY_MATCHED = true;
 var QUERY_NOT_MATCHED = undefined;
 
 function ds() { if (VERBOSE && ++VERBOSE > VERBOSEMAX) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
@@ -70,34 +68,32 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
     var lastIndex = check(index, handler, copiedInput);
     WARN('check lastIndex is', lastIndex);
 
-    if (lastIndex === REPEAT_FROM_SAME_TOKEN) {
+    // note: Infinity/lastIndex allows us to distinct -0 from 0. we use negative as a boolean side channel :)
+    var isNegative = Infinity/lastIndex < 0;
+    LOG('lastIndex negative?', isNegative);
+    if (isNegative) {
+      lastIndex = -lastIndex;
       if (copyInputMode === 'copy') WARN('Callback returned true but input mode is copy so not restarting from same');
     } else {
       sameLoopProtection = 2000; // how many rewrites does one take? :)
     }
 
-    if (lastIndex === REPEAT_FROM_SAME_TOKEN && copyInputMode === 'nocopy') {
+    if (isNegative && copyInputMode === 'nocopy') {
       if (--sameLoopProtection < 0) throw 'same loop protection; started from same token more than 2000x, callback should probably not return true';
       // handler return true at least once, restart from same index if input mode is nocopy
       // (if copyInputMode=copy, starting from the same token would most likely mean loop)
       WARN('Callback returned true at least once, restarting from same token');
+    } else if (lastIndex === QUERY_NOT_MATCHED) {
+      WARN('No match [' + lastIndex + '][' + repeatMode + ']');
+      ++index;
     } else if (!repeatMode || repeatMode === 'once') {
-      if (lastIndex) {
-        WARN('Found match ['+lastIndex+'], stopping search because repeatMode=once');
-        GRCLOSE();
-        break;
-      } else {
-        WARN('No match ['+lastIndex+']['+repeatMode+']');
-        ++index;
-      }
+      if (!(lastIndex >= 0)) throw 'fixme';
+      WARN('Found match ['+index+' ~ '+lastIndex+'], stopping search because repeatMode=once');
+      GRCLOSE();
+      break;
     } else if (repeatMode === 'after') {
-      if (index === lastIndex) {
-        WARN('No match ['+lastIndex+']['+repeatMode+']');
-        ++index;
-      } else {
-        WARN('Found match ['+lastIndex+'], jumping to after match because repeatMode=after');
-        index = lastIndex + 1;
-      }
+      WARN('Found match ['+lastIndex+'], jumping to after match because repeatMode=after');
+      index = lastIndex + 1;
     } else if (repeatMode === 'every') {
       if (lastIndex) WARN('Found match ['+lastIndex+'], starting with next token because repeatMode='+repeatMode);
       else WARN('No match ['+lastIndex+']['+repeatMode+']');
@@ -132,8 +128,8 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
   var EARLY_CALL = -1;
 
   var index = 0;
-  var from = 0;
   var symbolStarts = [];
+
   var queryFunction = eval('('+queryCode+');'); // direct eval woop
   var nonIntKeys = false; // have we seen args that are not ints?
 
@@ -189,7 +185,6 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
   function consumeToBlack() { // only consumes if current is white
     LOG('consumeToBlack() (move to next black token if not already)');
     if (isWhite()) {
-//      if (from === index) return false; // wait till first token is black before actually matching
       skipOneThenUpToNextBlack();
     }
     return !isWhite();
@@ -370,7 +365,6 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
 
   return function check(start, handler) {
     index = start;
-    from = start;
     nonIntKeys = false;
 
     if (argStack.length !== 0) throw new Error('Expect argStack to be empty before query check ['+argStack+'] ['+argPointers+']');
@@ -388,19 +382,26 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
 
     var returnValue = QUERY_NOT_MATCHED;
     if (matched) {
-      returnValue = QUERY_MATCHED;
       LOG('Queue implicit match call?', tokensMatched.slice(0),'->',tokensMatched[tokensMatched.length-1] !== EARLY_CALL);
       if (tokensMatched[tokensMatched.length-1] !== EARLY_CALL) {
         queueCall(argStack.slice(0));
       }
 
-      callStack.forEach(function(args){
+      // last token evaluated by query
+      returnValue = Math.max(start, index - 1); // make sure a single token doesnt end at start-1
+
+      callStack.forEach(function(args) {
         // TOFIX: %
         var args = flushArgs(args); // may return null
         var result = false;
 
         // if the handler returns `true`, the next match should start on the same index regardless
-        if (!args) {
+        if (typeof handler === 'string') {
+          WARN('Regular string replacement. Clearing tokens '+start+' ~ '+returnValue+' and replacing with %o', handler);
+          // note: index and lastIndex are declared below, but this function still has access to them at runtime
+          for (var i=start; i<=returnValue; ++i) tokens[i].value = '';
+          tokens[start].value = handler;
+        } else if (!args) {
           result = handler(token(start));
         } else if (nonIntKeys) {
           result = handler(args);
@@ -409,24 +410,19 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
         }
         WARN('handler result:', result);
         if (result === true) {
-          WARN('handler returned true so check will return true');
+          WARN('handler returned true so check will return negative index');
           explicitTrue = true;
         }
       });
-
-      // last token evaluated by query
-      if (repeatMode === 'after') returnValue = Math.max(start, index - 1);
     } else {
-      // continue as usual
-      if (repeatMode === 'after') returnValue = start;
-      else returnValue = QUERY_NOT_MATCHED;
+      returnValue = QUERY_NOT_MATCHED;
     }
 
     argStack.length = 0;
     callStack.length = 0;
     tokensMatched.length = 0;
 
-    if (explicitTrue) return REPEAT_FROM_SAME_TOKEN;
+    if (explicitTrue) return -returnValue; // negative means that drew should repeat on same token
     if (repeatMode === 'once' || repeatMode === 'after' || repeatMode === 'every') return returnValue;
 
     throw 'unknown repeatMode: '+repeatMode;

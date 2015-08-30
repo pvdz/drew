@@ -7,9 +7,10 @@ var macros = require('./../src/macros');
 
 var tests = require('./tests');
 
-var targetTestIndex = -1;
-//var targetTestIndex = 16;
-if (targetTestIndex >= 0) VERBOSE = true, console.warn('only running test', targetTestIndex);
+var targetTestIndex = '';
+//var targetTestIndex = 'plain text 1';
+//var targetTestIndex = 'js 1';
+if (targetTestIndex) VERBOSE = true, console.warn('only running test', targetTestIndex);
 else VERBOSE = false;
 
 function jsInputParser(input){
@@ -22,15 +23,11 @@ function jsInputParser(input){
 }
 
 for (var i=0; i<tests.txt.length; ++i) {
-  if (targetTestIndex < 0 || targetTestIndex === i) {
-    one(tests.txt[i], 'plain text '+i);
-  }
+  one(tests.txt[i], 'plain text '+i);
 }
 document.body.appendChild(document.createElement('hr'));
 for (var i=0; i<tests.js.length; ++i) {
-  if (targetTestIndex < 0 || targetTestIndex === i) {
-    one(tests.js[i], 'js '+i, jsInputParser);
-  }
+  one(tests.js[i], 'js '+i, jsInputParser);
 }
 
 function defaultTestCallback(token0, token1){
@@ -46,6 +43,8 @@ function defaultTestCallback(token0, token1){
 }
 
 function one(testCase, testIndex, inputParser) {
+  if (targetTestIndex && targetTestIndex !== testIndex) return;
+
   var rule = testCase[0];
   var input = testCase[1];
   var expect = testCase[2];
@@ -62,6 +61,7 @@ function one(testCase, testIndex, inputParser) {
   div.innerHTML =
     '<div>['+testIndex+':'+repeatMode+':'+inputMode+'] <i>'+esc(desc||'')+'</i></div>'+
     '<div>Query: <code>'+esc(rule)+'</code></div>'+
+    (typeof handler === 'string' ? '<div>Replc: <code>'+esc(handler)+'</code></div>' : '') +
     '<div>Input: <code>'+esc(input)+'</code></div>'+
     '<div>Expect:<code>'+esc(expect)+'</code></div>'+
     '<div>Parsing query...</div>';
@@ -74,7 +74,7 @@ function one(testCase, testIndex, inputParser) {
   try {
     funcCode = parse(rule, constants, macros);
     div.querySelectorAll('div')[1].style.backgroundColor = 'yellow';
-    if (targetTestIndex >= 0) console.log('generated code:\n'+funcCode);
+    if (targetTestIndex) console.log('generated code:\n'+funcCode);
   } catch (e) {
     err('failed rule parse', testIndex, rule, e);
     E = 'Query parser:' + String(e);
@@ -103,7 +103,7 @@ function one(testCase, testIndex, inputParser) {
 
   function antiCatch() {
     // resultTokens will be equal to tokens unless tokens is a string
-    var resultTokens = run(tokens, funcCode, function callbackWrapper(token0, token1){
+    var resultTokens = run(tokens, funcCode, typeof handler === 'string' ? handler : function callbackWrapper(token0, token1){
       // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
       // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
 
@@ -111,7 +111,7 @@ function one(testCase, testIndex, inputParser) {
 
       var v = handler.apply(this, arguments);
 
-      if (targetTestIndex >= 0) console.error('OK! Test callback called!', arguments);
+      if (targetTestIndex) console.error('OK! Test callback called!', arguments);
 
       return v;
     }, repeatMode, inputMode);
@@ -120,9 +120,9 @@ function one(testCase, testIndex, inputParser) {
   }
 
   outdiv.innerHTML = 'Running query against input...';
-  var calledback = false;
+  var calledback =  typeof handler === 'string'; // if not a string, the wrapper should set this to true
   if (E) {}
-  else if (targetTestIndex >= 0) {
+  else if (targetTestIndex) {
     antiCatch();
   }
   else try { antiCatch(); } catch (e) {
@@ -143,7 +143,7 @@ function one(testCase, testIndex, inputParser) {
       '<b>PASS</b>';
   }
 
-  if (targetTestIndex >= 0) {
+  if (targetTestIndex) {
     log(rule, funcCode, input, expect, output);
   }
 }

@@ -4,6 +4,10 @@ Declarative Rewriting Expressions Wuuuut
 
 Tokenize a language (or even just work on a bare string). Feed the tokens to Drew and apply your queries to do the rewriting.
 
+The goal of this library is to make it easy to manipulate, investigate, and rewrite tokenized input. Drew allows you to work on tokens in a similar way as <code>string.replace</code> works in JavaScript.
+
+You have input, usually pre-processed by a lexer of your choice, and a query or regular expression and apply this query to the input. A callback is called whenever a match is found.
+
 # run()
 
 To put Drew to work you call the global function `run` (tbd).
@@ -13,13 +17,13 @@ var tokens = run('foo or bar', '[`f`]=0[`o`]=1[`o`]=2', function(a,b,c){ a.value
 console.log(tokens.map(function(o){ return o.value; }).join(''); // -> '123 or bar'
 ```
 
-You can pass on a string to use the built in string splitter. You can also pass on an array of tokens of pre-parsed input with a custom parser. Only if the tokens are a string, Drew will use its own `split()` on them.
+You can pass on a string to use the built in string splitter. You can also pass on an array of tokens of pre-parsed input with a custom parser. Only if first argument is a string, Drew will use its own `split()` on them.
 
 The full api of `run` looks like this: `run(input, queryCode, handler, repeatMode, copyInputMode, startTokenIndex, stopTokenIndex)`
 
 - `input`: either a string or an array of tokens. Note that if an array, it will be the same reference that's returned.
 - `queryCode`: string, the query to apply to the input
-- `handler`: function, the callback
+- `handler`: function or string. A callback is called on every call. If this is a string any time a callback would be called it clears the tokens of the entire range of the match and set the value of the first token to this string.
 - `repeatMode`: string, optional, one of 'once', 'every', 'after'
 - `copyInputMode`: string, optional, one of 'copy', 'nocopy'
 - `startTokenIndex`: number, optional, token index where Drew should start matching
@@ -30,6 +34,7 @@ It will return an array of tokens. If input was a string it will be a fresh arra
 # Queries
 
 Every "query" is a matching rule. Each rule is translated to JS code to do the actual matching.
+
 Drew is a DSL designed to make rewriting easier. It's main source inspiration are common regular expressions.
 
 ## Query language CFG

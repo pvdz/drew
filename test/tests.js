@@ -19,6 +19,15 @@ var tests = module.exports = {
       '@aa',
       'simple text',
     ],
+    [
+      '[`a`]2',
+      'aaa',
+      'bba',
+      'string handler should replace whole match',
+      REPEAT_ONCE,
+      INPUT_NO_COPY,
+      'bb'
+    ],
   ],
   js: [
     [
