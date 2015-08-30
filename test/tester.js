@@ -8,7 +8,7 @@ var macros = require('./../src/macros');
 var tests = require('./tests');
 
 var targetTestIndex = -1;
-//var targetTestIndex = 130;
+//var targetTestIndex = 16;
 if (targetTestIndex >= 0) VERBOSE = true, console.warn('only running test', targetTestIndex);
 else VERBOSE = false;
 
@@ -18,6 +18,18 @@ for (var i=0; i<tests.length; ++i) {
   }
 }
 
+function defaultTestCallback(token0, token1){
+  // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
+  // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
+
+  var args = Array.prototype.slice.call(arguments, 0);
+//      console.log('callback('+args.map(function(t){return t.white;})+')');
+//      console.log('callback('+args+')');
+  if (token0) token0.value = '@';
+  if (token1) token1.value = '$';
+  for (var i=2; i<args.length; ++i) args[i].value = '#';
+}
+
 function one(testCase, testIndex) {
   var rule = testCase[0];
   var input = testCase[1];
@@ -25,6 +37,7 @@ function one(testCase, testIndex) {
   var desc = testCase[3];
   var repeatMode = testCase[4] || 'once';
   var inputMode = testCase[5] || 'nocopy';
+  var handler = testCase[6] || defaultTestCallback;
 
   var funcCode = undefined;
   var output = undefined;
@@ -69,20 +82,18 @@ function one(testCase, testIndex) {
   }
 
   function antiCatch() {
-    // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
-    // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
-    run(tokens.whites, funcCode, function(token0, token1){
+    run(tokens.whites, funcCode, function callbackWrapper(token0, token1){
+      // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
+      // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
+
       calledback = true;
 
-      var args = Array.prototype.slice.call(arguments, 0);
-//      console.log('callback('+args.map(function(t){return t.white;})+')');
-//      console.log('callback('+args+')');
-      if (args[0]) args[0].value = '@';
-      if (args[1]) args[1].value = '$';
-      for (var i=2; i<args.length; ++i) args[i].value = '#';
+      var v = handler.apply(this, arguments);
 
       output = tokens.whites.map(function(t){ return t.value; }).join('');
-      if (targetTestIndex >= 0) console.error('OK! Test callback called!', args);
+      if (targetTestIndex >= 0) console.error('OK! Test callback called!', arguments);
+
+      return v;
     }, repeatMode, inputMode);
   }
 

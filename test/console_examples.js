@@ -56,6 +56,33 @@ var consoleExamples = [
     repeat: 'after',
     copy: 'nocopy',
   },
+  {
+    desc: 'eliminate LOGs from generated content',
+    query: '(({`&&`}{`!`}{`void`}{`LOG`}{PAREN_PAIR})  |  ({`LOG`}|{`GROPEN`}|{`GRCLOSE`}){PAREN_PAIR}{`;`})=0,1',
+    input: 'function query(){\n  // input query: {PAREN_PAIR}=0,1\n  // final query: {(`(`& JUMP_TO_RHP)}=0,1\n  // query start..\nvar group0 = false;\nmatchedSomething = false;\nGROPEN("root start");\n{\n\n//#parseAtomMaybe (parsed `{(`(`& JUMP_TO_RHP)}=0,1`)\n// - its a black token\n{\nmatchedSomething = true;\n{ // parseAtomMaybe 1 for black token `{`\n// black token 1:0\ngroup0 = checkTokenBlack(symb() && !void LOG("# 1001 start of symbol [PAREN_PAIR] at 11 in query to token "+index+":", token())\n//#parseAtomMaybe (parsed `(`(`& JUMP_TO_RHP)`)\n// - its a _nested_ group\n&& (matchedSomething = true) && checkConditionGroup(symgc()// parseGroup, first=false\n && !void LOG("# 1002 start of symbol [PAREN_OPEN] at 13 in query to token "+index+":", token()) && (true && !void LOG("# 1003 start of literal [`%o`] at 5 in query to token "+index+":", "(", token()) && is(\'(\') && (true && !void LOG("# 1004 start of symbol [JUMP_TO_RHP] at 18 in query to token "+index+":", token()) && (token().rhp && skipTo(token().rhp.white)))))// parseAtomMaybe end\n, \'0\', \'1\');\n} // `}` 1 for black token\n}\n// parseAtomMaybe end\n\nGRCLOSE();\n}\n\n  // query end..\n  return group0;\n}\n',
+    handlerargs: 'a, b',
+    handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\nfor (var i=a.white; i<=b.white; ++i) {\n  TOKENS.whites[i].value = \'\';\n}',
+    repeat: 'after',
+    copy: 'nocopy',
+  },
+  {
+    desc: 'eliminate comments from generated content',
+    query: '[WHITE & /^\\//] : silly only because zeparser outputs comment tokens as white for simplicity, well where is your simplicity now eh',
+    input: '// this is after the "eliminate LOGs from generated content" example ran:\nfunction query(){\n  // input query: {PAREN_PAIR}=0,1\n  // final query: {(`(`& JUMP_TO_RHP)}=0,1\n  // query start..\nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n//#parseAtomMaybe (parsed `{(`(`& JUMP_TO_RHP)}=0,1`)\n// - its a black token\n{\nmatchedSomething = true;\n{ // parseAtomMaybe 1 for black token `{`\n// black token 1:0\ngroup0 = checkTokenBlack(symb() \n//#parseAtomMaybe (parsed `(`(`& JUMP_TO_RHP)`)\n// - its a _nested_ group\n&& (matchedSomething = true) && checkConditionGroup(symgc()// parseGroup, first=false\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))// parseAtomMaybe end\n, \'0\', \'1\');\n} // `}` 1 for black token\n}\n// parseAtomMaybe end\n\n\n}\n\n  // query end..\n  return group0;\n}\n',
+    handlerargs: 'a',
+    handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\na.value = \'\';\n',
+    repeat: 'after',
+    copy: 'nocopy',
+  },
+  {
+    desc: 'cleanup artifacts afterwards',
+    query: '({`{`|`;`}{CURLY_PAIR}=0,1) :eliminate empty blocks | ([NEWLINE]~[NEWLINE])=2,3 : eliminate empty lines, the tilde skips all non-newline whites, make sure 3 is not the last newline so one newline survives',
+    input: '// result after comment elimination example\nfunction query(){\n  \n  \n  \nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n\n\n{\nmatchedSomething = true;\n{ \n\ngroup0 = checkTokenBlack(symb() \n\n\n&& (matchedSomething = true) && checkConditionGroup(symgc()\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))\n, \'0\', \'1\');\n} \n}\n\n\n\n}\n\n  \n  return group0;\n}\n',
+    handlerargs: 'a,b,c,d',
+    handler: '\nif (a && b) {\ndocument.querySelector(\'#debug\').value += \'block called with \'+arguments.length+\' arguments\\n\\n\';\n  a.value = \'\';\n  b.value = \'\';\n}\n\n\nif (c && d) {\n  document.querySelector(\'#debug\').value += \'empty line called with \'+arguments.length+\' arguments\\n\\n\';\n  for (var i=c.white; i<=d.white; ++i) TOKENS.whites[i].value = \'\';\n}',
+    repeat: 'every',
+    copy: 'copy',
+  },
 ];
 
 consoleExamplesBak = consoleExamples.slice(0);

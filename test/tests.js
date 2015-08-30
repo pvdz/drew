@@ -8,8 +8,8 @@ var REPEAT_EVERY = 'every';
 var INPUT_COPY = 'copy';
 var INPUT_NO_COPY = 'nocopy';
 
-// each test is an array with: [<query>, <input>, <output>[, <desc>[, <repeatmode=once>[, copymode=nocopy]]]]
-// (eg; desc, repeatmode, and copymode are optional)
+// each test is an array with: [<query>, <input>, <output>[, <desc>[, <repeatmode=once>[, copymode=nocopy[, handler:function]]]]
+// (eg; desc, repeatmode, copymode, and handler are optional)
 
 var tests = module.exports = [
   [
@@ -89,22 +89,52 @@ var tests = module.exports = [
     '~ means consume white tokens until current is black. then check for ^. since prev token will not be newline the query fails.'
   ],
   [
+    '[`a`]|~',
+    '  a;  b;',
+    '@ a;  b;',
+    'the ~ at the "start" wont skip anything so it may as well be the empty query (which matches everything)'
+  ],
+  [
+    '[WHITE & TAB][`;`]',
+    ' ;\t;',
+    ' ;@;',
+    'should only match second semi', // update docs if this changes
+    REPEAT_EVERY
+  ],
+  [
+    '[WHITE & SPACE | TAB][`;`]',
+    ' ;\t;',
+    '@;@;',
+    'should match both, same as white&(space|tab)', // update docs if this changes
+    REPEAT_EVERY
+  ],
+  [
     '~[`a`]|~[`b`]',
     '  a;  b;',
-    '  @;  b;',
+    '  @;  @;',
     // the ~ wont seek at all when at the start of input
-    // the ~ wont seek when it's the start of the query (effectively a noop)
-    // the runner applies the query starting at every index so at index 2, the ~ is ignored and `a` is found; a match
-    'matches a when applying the rule starting at index 2 (!)'
+    // the ~ wont seek as long as the query hasnt consumed anything (optimization)
+    // the or wraps whole left and right side, so matching ~a and ~b
+    // with ~ at query start being ignored it's actually matching a and b
+    'matches a when applying the rule starting at index 2 (!)',
+    REPEAT_AFTER,
   ],
   [
     '[`x`][`;`]~[`a`]|~[`b`]',
     'x;  a;  b;',
-    '@;  a;  b;',
-    'same as before but with leading stuff to force ~ to seek'
+    '@;  a;  @;',
+    // this should match ~b or the other part as a whole
+    'same as before but with leading stuff to force ~ to seek',
+    REPEAT_AFTER,
   ],
   [
     '(~[`a`]|~[`b`])*',
+    '  a;  b;',
+    '@ a;  b;',
+    'equivalent to matching nothing (so anything works)'
+  ],
+  [
+    '((~[`a`])|(~[`b`]))*',
     '  a;  b;',
     '@ a;  b;',
     'equivalent to matching nothing (so anything works)'
@@ -114,6 +144,26 @@ var tests = module.exports = [
     '  a;  b;',
     '  @;  b;',
     'reset ~ after match, grouped repeat (tbd, match should start at [a])'
+  ],
+  [
+    '((~[`a`])|(~[`b`]))+',
+    '  a;  b;',
+    '  @;  b;',
+    'reset ~ after match, grouped repeat (tbd, match should start at [a])'
+  ],
+  [
+    '(~[`a`]|[`b`])+=0,1',
+    '  a;  b;',
+    '  $;  $;',
+    '~ is ignored because query start, the match wont repeat but will match a and b (only) individually',
+    REPEAT_AFTER
+  ],
+  [
+    '((~[`a`])|[`b`])+=0,1',
+    '  a;  b;',
+    '  $;  $;',
+    '~ only applies to a but ignored anyways because still query start, groups are irrelevant for that',
+    REPEAT_AFTER
   ],
   [
     '((~[`a`])|(~[`b`]))|(~[`c`])',
@@ -184,7 +234,7 @@ var tests = module.exports = [
   [
     '^~[`b`]',
     'a;\n  b;',
-    'a;\n  @;',
+    'a;\n@ b;',
     '~[x] is equal to {x}'
   ],
   [
@@ -197,12 +247,6 @@ var tests = module.exports = [
     '^{`a`}',
     '  a;\n  b;',
     '  @;\n  b;',
-    '~[x] is equal to {x}'
-  ],
-  [
-    '^~[`b`]',
-    '  a;\n  b;',
-    '  a;\n  @;',
     '~[x] is equal to {x}'
   ],
   [
@@ -220,7 +264,7 @@ var tests = module.exports = [
   [
     '~^^~[`a`]',
     ' a;\nb;',
-    ' @;\nb;',
+    '@a;\nb;',
     '~ is a noop if at start of query'
   ],
   [
@@ -1525,6 +1569,33 @@ var tests = module.exports = [
     'scanning same token twice, check range',
   ],
 
+  [
+    '[`a`]|[`b`]',
+    'a',
+    'c',
+    'return true is like repeat mode = same',
+    REPEAT_AFTER,
+    INPUT_NO_COPY,
+    function(a){ if (a.value === 'a') a.value = 'b'; else if (a.value === 'b') a.value = 'c'; else return; return true; }
+  ],
+
+  // tbd
+  [
+    '({`{`|`;`}{CURLY_PAIR}=0,1) :eliminate empty blocks | ([NEWLINE]~[NEWLINE])=2,3 : eliminate empty lines, the tilde skips all non-newline whites, make sure 3 is not the last newline so one newline survives',
+    '// result after comment elimination example\nfunction query(){\n  \n  \n  \nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n\n\n{\nmatchedSomething = true;\n{ \n\ngroup0 = checkTokenBlack(symb() \n\n\n&& (matchedSomething = true) && checkConditionGroup(symgc()\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))\n, \'0\', \'1\');\n} \n}\n\n\n\n}\n\n  \n  return group0;\n}\n',
+    '',
+    'index is not being reset so the newlines dont match',
+    REPEAT_EVERY,
+    INPUT_COPY
+  ],
+  [
+    '([NEWLINE](~[NEWLINE])+<)=2,3  |  ({`{`|`;`}~[NEWLINE]~[`{`]~[NEWLINE]<)=2,3',
+    '// result after comment elimination example\nfunction query(){\n  \n  \n  \nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n\n\n{\nmatchedSomething = true;\n{ \n\ngroup0 = checkTokenBlack(symb() \n\n\n&& (matchedSomething = true) && checkConditionGroup(symgc()\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))\n, \'0\', \'1\');\n} \n}\n\n\n\n}\n\n  \n  return group0;\n}\n',
+    '',
+    'regression: crash',
+    REPEAT_EVERY,
+    INPUT_COPY
+  ],
 
 
 
