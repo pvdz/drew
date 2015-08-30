@@ -1068,7 +1068,7 @@ var tests = module.exports = [
     '((^[WHITE])?[WHITE]*)=0,1 {FUNCTION}{IDENTIFIER}=2',
     'foo();\nfunction foo() {}',
     'foo();$function #() {}',
-    '^WHITE should match the newline' // TOFIX ^
+    '^WHITE should match the newline'
   ],
   [
     '{IDENTIFIER}[SPACE]?=1,2',
@@ -1122,7 +1122,7 @@ var tests = module.exports = [
     '((^[WHITE])[WHITE]*)?=0,1 {FUNCTION}{IDENTIFIER}=2',
     'foo;\nfunction foo() {}',
     'foo;\n@ #() {}',
-    'regression: ^WHITE on newline should not match function' // TOFIX: ^
+    'regression: ^WHITE on newline should not match function'
   ],
 
   [
