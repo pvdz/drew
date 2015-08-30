@@ -17,6 +17,11 @@ function GRCLOSE(){ if (ds()) console.groupEnd.apply(console, arguments); }
 
 function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIndex, stopTokenIndex){
   LOG('run(<tokens>, <queryCode>, <handler>, '+[repeatMode, copyInputMode, startTokenIndex, stopTokenIndex].join()+')');
+
+  if (typeof tokens === 'string') {
+    tokens = split(tokens);
+  }
+
   if (!startTokenIndex) startTokenIndex = 0;
   if (!stopTokenIndex) stopTokenIndex = tokens.length-2;
   if (!repeatMode) repeatMode = 'once'; // once, after, every
@@ -103,6 +108,8 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
     GRCLOSE();
   }
   GRCLOSE();
+
+  return tokens;
 }
 
 function compile(queryCode, tokens, repeatMode, _copiedInput) {

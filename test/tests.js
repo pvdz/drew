@@ -12,6 +12,14 @@ var INPUT_NO_COPY = 'nocopy';
 // (eg; desc, repeatmode, copymode, and handler are optional)
 
 var tests = module.exports = {
+  txt: [
+    [
+      '[`a`]',
+      'aaa',
+      '@aa',
+      'simple text',
+    ],
+  ],
   js: [
     [
       '[SPACE]',

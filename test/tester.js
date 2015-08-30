@@ -12,9 +12,24 @@ var targetTestIndex = -1;
 if (targetTestIndex >= 0) VERBOSE = true, console.warn('only running test', targetTestIndex);
 else VERBOSE = false;
 
+function jsInputParser(input){
+  try {
+    return Par.parse(input, {saveTokens:true}).whites;
+  } catch (e) {
+    err('ZeParser rejected the initial test input:', e, input);
+    return 'Input parser threw:' + String(e);
+  }
+}
+
+for (var i=0; i<tests.txt.length; ++i) {
+  if (targetTestIndex < 0 || targetTestIndex === i) {
+    one(tests.txt[i], 'plain text '+i);
+  }
+}
+document.body.appendChild(document.createElement('hr'));
 for (var i=0; i<tests.js.length; ++i) {
   if (targetTestIndex < 0 || targetTestIndex === i) {
-    one(tests.js[i], i);
+    one(tests.js[i], 'js '+i, jsInputParser);
   }
 }
 
@@ -30,7 +45,7 @@ function defaultTestCallback(token0, token1){
   for (var i=2; i<args.length; ++i) args[i].value = '#';
 }
 
-function one(testCase, testIndex) {
+function one(testCase, testIndex, inputParser) {
   var rule = testCase[0];
   var input = testCase[1];
   var expect = testCase[2];
@@ -72,17 +87,23 @@ function one(testCase, testIndex) {
     E = 'Func parser:' + String(e);
     err('zeparser rejected the generated rule code', testIndex, rule, e, funcCode);
   }
-  outdiv.innerHTML = 'Parsing test input';
-  if (!E) try {
-    var tokens = Par.parse(input, {saveTokens:true});
-    div.querySelectorAll('div')[2].style.backgroundColor = 'lightgreen';
-  } catch (e) {
-    E = 'Input parser:' + String(e);
-    err('zeparser rejected the initial input', testIndex, rule, e, funcCode, input);
+
+  if (!inputParser) var tokens = input; // use built-in text parser
+  else if (!E) {
+    outdiv.innerHTML = 'Parsing test input';
+    var tokens = inputParser(input);
+    if (typeof tokens === 'string') {
+      E = tokens;
+      tokens = undefined;
+      div.querySelectorAll('div')[2].style.backgroundColor = 'red';
+    } else {
+      div.querySelectorAll('div')[2].style.backgroundColor = 'lightgreen';
+    }
   }
 
   function antiCatch() {
-    run(tokens.whites, funcCode, function callbackWrapper(token0, token1){
+    // resultTokens will be equal to tokens unless tokens is a string
+    var resultTokens = run(tokens, funcCode, function callbackWrapper(token0, token1){
       // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
       // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
 
@@ -90,11 +111,12 @@ function one(testCase, testIndex) {
 
       var v = handler.apply(this, arguments);
 
-      output = tokens.whites.map(function(t){ return t.value; }).join('');
       if (targetTestIndex >= 0) console.error('OK! Test callback called!', arguments);
 
       return v;
     }, repeatMode, inputMode);
+
+    output = resultTokens.map(function(t){ return t.value; }).join('');
   }
 
   outdiv.innerHTML = 'Running query against input...';
