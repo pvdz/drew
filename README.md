@@ -79,17 +79,25 @@ run(split('foo'), '[/^foo$/i]', func, 'once', 'nocopy'); // same
 run(split('a \t b'), '[`a`][SPACE][TAB][SPACE][`b`]', func);
 ```
 
-- `|` = "or"; `[A | B]` matches as a whole when either criteria A or B matches individually (lazy eval). Can be used in and outside tokens. `&` and `|` are processed left to right, same strength. Use parens to disambiguate as they have no precedence over each other.
+- `|` = "or"; `[A | B]` matches as a whole when at least the left or right side of the pipe matches individually (lazy eval). Can be used inside and outside tokens. `&` and `|` are processed left to right, same strength, and scope everthing in between. Use parens for disambiguation as they have no precedence over each other.
 
 ```
 run(split('aabbababbaaab'), '[`a`]|[`b`]', func);
-run(split('aabbababbaaab'), '[/(a|b)+/]', func);
+run(split('aabbababbaaab'), '[/(a|b)/]', func);
+
+
+run(split('aabbababbaaab'), '[`a`][`a`]|[`b`][`b`]', func); // matches aa and bb, not ab nor ba
+run(split('aabbababbaaab'), '[/((aa)|(bb))/]', func);
+
+run(split('aabbababbaaab'), '[`a`][`a`|`b`][`b`]', func); // matches aab and abb, nothing else
+run(split('aabbababbaaab'), '[/(a[ab]b)/]', func);
 ```
 
-- `&` = "and"; `[A & B]` matches as a whole when both criteria A and B match. Can be (should be) used inside tokens. They are implied outside of tokens so you shouldn't need them there. `&` and `|` are processed left to right, same strength. Use parens to disambiguate as they have no precedence over each other.
+- `&` = "and"; `[A & B]` matches as a whole when both criteria A and B match. Can only be used inside tokens. They are implied outside of tokens so you don't need them there. `&` and `|` are processed left to right, same strength, and should only have one atom in between. Use parens for disambiguation as they have no precedence over each other.
 
 ```
 run(split(' a\ta'), '[WHITE & TAB][`a`]', func); // only matches second a
+run(split(' a\ta'), '[WHITE & TAB | SPACE][`a`]', func); // same as white&(tab|space)
 ```
 
 - `()` = group criteria ``[SPACE | (ARG & `foo`)]`` or atoms

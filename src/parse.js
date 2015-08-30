@@ -8,11 +8,18 @@ function parse(query, hardcoded, macros) {
   var inputQuery = query;
   var lastAtomStart = 0;
 
+  var TOPLEVEL_START = true;
+  var NOT_TOPLEVEL_START = false;
   var TOPLEVEL = true;
   var NOT_TOPLEVEL = false;
   var INSIDE_TOKEN = true;
   var OUTSIDE_TOKEN = false;
   var OPTIONAL = true;
+  var NOT_INVERSE = false;
+  var FORCE_PARAMFILL = true;
+  var NORMAL_CALL = 0;
+  var REPEAT_CALL = 1;
+  var COLLECT_CALL = 2;
 
   var counter = 0;
   var tokenCounter = 0;
@@ -68,37 +75,43 @@ function parse(query, hardcoded, macros) {
       if (peek('|')) {
         consume();
         if (VERBOSE) s += 'GRCLOSE();\n';
-        s += '}\n';
-        s += 'if (group'+currentGroup+') {\n';
-        if (VERBOSE) s += 'LOG("Last part of top level matched, no need to check rest after OR");\n';
-        s += '} else {\n';
-        if (VERBOSE) s += 'GROPEN("root OR start");\n';
-        s += 'matchedSomething = false;\n';
-        // previous part did not match so we basically start from scratch
-        s += 'if (!group'+currentGroup+
-          ' && !void(tokensMatched.length = 0)' +
-          ' && !void(callStack.length = 0)' +
-          ' && !void(argStack.length = 0)' +
-        ') ';
+        s += '} // top level, OR\n';
+
+        if (VERBOSE) {
+          s += 'if (group' + currentGroup + ') LOG("Last part of top level matched, no need to check rest after OR");\n';
+        }
+
+        s +=
+          '// toplevel OR\n' +
+          'if (!group' + currentGroup + ') {\n' +
+          '  GROPEN("root OR start");\n' +
+          '  matchedSomething = false;\n' +
+            // previous part did not match so we basically start from scratch
+          '  tokensMatched.length = 0;\n' +
+          '  callStack.length = 0;\n' +
+          '  argStack.length = 0;\n' +
+          '';
+      } else if (peek('&')) {
+        reject('Dont use & in toplevel, it is always implicitly the case');
       } else {
         break;
       }
     } while(true);
     if (VERBOSE) s += 'GRCLOSE();\n';
-    s += '}\n';
+    s += '} // top level end\n';
 
     return s;
   }
 
   function parseTopLevelAtom(currentGroup) {
-    var s = '';
+    var s = '// parseTopLevelAtom\n';
     var atom;
-    var first = true;
+    var first = TOPLEVEL_START;
     var n = 0;
-    while (atom = parseAtomMaybe(TOPLEVEL, OUTSIDE_TOKEN, currentGroup, first)) {
+    while (atom = parseAtomMaybe(OUTSIDE_TOKEN, currentGroup, first)) {
       ++n;
       s += atom + '\n';
-      first = false;
+      first = NOT_TOPLEVEL_START;
     }
 
     return s;
@@ -109,7 +122,7 @@ function parse(query, hardcoded, macros) {
     return s;
   }
 
-  function parseAtomMaybe(top, insideToken, tokenGroupNumber, isTopLevelStart, invert){
+  function parseAtomMaybe(insideToken, tokenGroupNumber, isTopLevelStart, invert){
     lastAtomStart = pos;
     var startpos = pos; // for debugging
     var currentCounter = counter++;
@@ -149,7 +162,7 @@ function parse(query, hardcoded, macros) {
     } else if (peek('(')) {
       if (insideToken) {
         result += '// - its a _nested_ group\n';
-        beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, tokenGroupNumber, false) + ')';
+        beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, tokenGroupNumber, NOT_TOPLEVEL_START) + ')';
 
         result += (insideToken?'&& (':'{\n') + 'matchedSomething = true' + (insideToken?')':';\n');
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, tokenGroupNumber, currentCounter, insideToken);
@@ -188,46 +201,36 @@ function parse(query, hardcoded, macros) {
       result += 'queueEarlyCall("' + id + '");\n';
     } else {
       // at this point it must be a top level ^ ^^ $ $$ or ~, or nothing.
-      var r = parseLineStuff(insideToken, tokenGroupNumber, OPTIONAL);
+      var r = parseLineStuff(insideToken, tokenGroupNumber, isTopLevelStart, OPTIONAL);
       if (!r) return r;
       result += '// - it must be a line start or end or tilde...\n';
       result += r;
     }
 
     result =
-      '\n//#parseAtomMaybe (parsed `'+query.slice(startpos, pos).replace(/\n/g, '\\n')+'`)\n'+
+      '\n//#parseAtomMaybe('+insideToken+', '+tokenGroupNumber+', '+isTopLevelStart+', '+invert+') (parsed `'+query.slice(startpos, pos).replace(/\n/g, '\\n')+'`)\n'+
       result +
       '// parseAtomMaybe end\n';
     return result;
   }
 
-  function parseLineStuff(insideToken, tokenGroupNumber, optional) {
-    var result = '';
+  function parseLineStuff(insideToken, tokenGroupNumber, isTopLevelStart, optional) {
+    var result = '//#parseLineStuff('+insideToken+', '+tokenGroupNumber+', '+optional+')\n';
 
     if (peek('~')) {
       assert('~');
       if (insideToken) reject('Tilde (~) only allowed outside of tokens');
 
       result +=
-        '// - its a tilde (~)\n'+
         '{\n'+
-        // note: before matching anything we wont seek and prevent the whole query preemptively
-        '  // dont seek for leading ~, just wait for a non-spacy token\n'+
-        '  if (' +
-          'GROPEN("~ seek"),'+
-          'LOG("~ consumeToBlack() past spaces and tabs at all?", "matchedSomething=", matchedSomething, "start=", index),'+
-          'matchedSomething) {\n' +
-        '    if (isSpaceTabComment()) {\n'+
-        '      LOG("~ skipping spaces and tabs");\n'+
-        '      do LOG("skipping", tokens[index]),++index;\n' +
-        '      while (isSpaceTabComment());'+
-        '      // ~\n'+
-        '    }\n'+
-        '    LOG(group'+tokenGroupNumber+'?"~ passed":"~ failed", "index="+index);\n'+
+        '  if (matchedSomething) {\n'+
+        '    GROPEN("~ seek");\n'+
+        injectMacro(macros['~'], pos-1, pos, insideToken, tokenGroupNumber, isTopLevelStart, NOT_INVERSE)+
         '    GRCLOSE();\n'+
+        '  } else {\n'+
+        '    LOG("Still at the start of the query so not applying ~");\n'+
         '  }\n'+
-        '  else GRCLOSE();\n' +
-        '  group'+tokenGroupNumber+' = true; // the ~ seek passes regardless, there is no valid condition for failing\n'+
+        '  group'+tokenGroupNumber+' = true; // the ~ seek passes regardless, there is no valid condition for failing and otherwise the query can never pass with ~ at the start\n'+
         '}\n'+
       '';
     } else if (peek('>') || peek('<')) {
@@ -354,24 +357,24 @@ function parse(query, hardcoded, macros) {
       s += 'tokensMatchGroupPointers.push(tokensMatched.length); // parseGroup; store pointer to current matches so we can drop new matches in case the group fails\n';
     }
     var startOfChain = 1;
-    var noLongerFirst = first; // "pointer" so we can reset to initial value when we encounter a pipe...
+    var toplevelStartStatus = first; // "pointer" so we can reset to initial value when we encounter a pipe...
     while (true) {
       if (peek(')')) break;
       else if (peek('[')) {
         if (insideToken) reject('Trying to parse another token while inside a token');
         if (!startOfChain) s += 'if (group'+tokenGroupIndex+')\n';
-        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, noLongerFirst);
-        noLongerFirst = false;
+        s += parseAtomMaybe(insideToken, tokenGroupIndex, toplevelStartStatus);
+        toplevelStartStatus = NOT_TOPLEVEL_START;
       } else if (peek('{')) {
         if (insideToken) reject('Trying to parse another token while inside a token');
         if (!startOfChain) s += 'if (group'+tokenGroupIndex+')\n';
-        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, noLongerFirst);
-        noLongerFirst = false;
+        s += parseAtomMaybe(insideToken, tokenGroupIndex, toplevelStartStatus);
+        toplevelStartStatus = NOT_TOPLEVEL_START;
       } else if (peek('(')) {
-        s += parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, noLongerFirst);
-        noLongerFirst = false;
+        s += parseAtomMaybe(insideToken, tokenGroupIndex, toplevelStartStatus);
+        toplevelStartStatus = NOT_TOPLEVEL_START;
       } else if (peek('|')) {
-        noLongerFirst = first; // reset to what it was at the call
+        toplevelStartStatus = first; // reset to what it was at the call
         assert('|');
         if (insideToken) reject('Expecting ors to be caught in parseMatchConditions');
         startOfChain = 2; // first is immediately dec'ed, 2 makes sure it survives one loop
@@ -405,14 +408,14 @@ function parse(query, hardcoded, macros) {
         else reject('No need to put & between tokens (just omit them), only allowed between match conditions');
       } else {
 
-        var linestuff = parseLineStuff(insideToken, tokenGroupIndex, OPTIONAL)
+        var linestuff = parseLineStuff(insideToken, tokenGroupIndex, NOT_TOPLEVEL, OPTIONAL)
 
         if (linestuff) {
           s += linestuff;
-          noLongerFirst = false;
+          toplevelStartStatus = NOT_TOPLEVEL_START;
         } else {
           s += parseMatchConditions(insideToken, tokenGroupIndex);
-          noLongerFirst = false; // ?
+          toplevelStartStatus = NOT_TOPLEVEL_START; // ?
         }
       }
       if (startOfChain) startOfChain--;
@@ -456,7 +459,8 @@ function parse(query, hardcoded, macros) {
         return parseStarCondition(invert);
 
       case '(':
-        return parseAtomMaybe(NOT_TOPLEVEL, insideToken, undefined, undefined, invert);
+        // TOFIX: create a test under which the second parameter is relevant as it seems to be ignored right now
+        return parseAtomMaybe(insideToken, undefined, NOT_TOPLEVEL, invert);
 
       case '/':
         if (insideToken) return parseRegex();
@@ -556,7 +560,7 @@ function parse(query, hardcoded, macros) {
 
   function parseSymbol(insideToken, tokenGroupIndex, invert) {
     var start = pos;
-    var s = consume();
+    var s = consume(); // TOFIX: should this be `consume`? will skip next whitespace, confirm.
 
     while (true) {
       var peeked = peek();
@@ -577,9 +581,11 @@ function parse(query, hardcoded, macros) {
       t += (invert?'!':'') + '('+hardcoded[s]+')';
       if (VERBOSE && !insideToken) t += ';\n';
       return t;
-    } // TOFIX: detect token state and report?
+    }
+
     if (macros[s]) {
-      t += injectMacro(macros[s], start, pos, insideToken, tokenGroupIndex, invert);
+      // note: symbols are inside tokens so never toplevel
+      t += injectMacro(macros[s], start, pos, insideToken, tokenGroupIndex, NOT_TOPLEVEL, invert);
       return t;
     }
 
@@ -648,15 +654,15 @@ function parse(query, hardcoded, macros) {
     return name;
   }
 
-  function injectMacro(macro, from, to, insideToken, tokenGroupIndex, invert) {
+  function injectMacro(macro, from, to, insideToken, tokenGroupIndex, isTopLevelStart, invert) {
     // remove lastAtomStart...pos and replace it with macro
     // then reset pos and parse atom again
-    var s = '';
-
+    var s = '//injectMacro `'+query.slice(from, to)+'` -> `'+macro+'`\n';
     query = query.slice(0, from) + macro + query.slice(to);
+
     if (VERBOSE) WARN('Extrapolated query:', query);
     pos = from;
-    if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(NOT_TOPLEVEL, insideToken, tokenGroupIndex, undefined, invert);
+    if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(insideToken, tokenGroupIndex, isTopLevelStart, invert);
     return s + parseMatchConditions(insideToken, tokenGroupIndex, invert);
   }
 
@@ -664,8 +670,6 @@ function parse(query, hardcoded, macros) {
     // [foo] 1
     // [foo] 1...
     // [foo] 1..2
-
-    var FORCE_PARAMFILL = true;
 
     var min = 0;
     var max = 0; // 0 => token.length
@@ -712,10 +716,6 @@ function parse(query, hardcoded, macros) {
     if (insideToken) {
       throw 'Parse error: found quantifier for non-token or non-token-group. You can only quantify tokens.';
     }
-
-    var NORMAL_CALL = 0;
-    var REPEAT_CALL = 1;
-    var COLLECT_CALL = 2;
 
     var callbackMode = NORMAL_CALL;
 

@@ -2,6 +2,12 @@ module.exports = run;
 
 var VERBOSE = true;
 var VERBOSEMAX = 5000;
+
+// note: these three cannot use numbers as values.
+var REPEAT_FROM_SAME_TOKEN = false;
+var QUERY_MATCHED = true;
+var QUERY_NOT_MATCHED = undefined;
+
 function ds() { if (VERBOSE && ++VERBOSE > VERBOSEMAX) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
 function LOG(){ if (ds()) console.log.apply(console, arguments); }
 function WARN(){ if (ds()) console.warn.apply(console, arguments); }
@@ -18,6 +24,7 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
 
   var index = startTokenIndex;
   var max = stopTokenIndex; // dont start at EOF token, it's artificial
+  var sameLoopProtection = 2000; // break if a handler keeps returning true for same token start
 
   var copiedInput;
   switch (copyInputMode) {
@@ -56,10 +63,16 @@ function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIn
   while (index <= max) {
     GROPEN('Applying query starting at '+(copiedInput?'(c) ':'')+'token %d / %d: %o ->', index, stopTokenIndex, (copiedInput ? copiedInput[index] : tokens[index].value), tokens[index]);
     var lastIndex = check(index, handler, copiedInput);
+    WARN('check lastIndex is', lastIndex);
 
-    if (lastIndex === true && copyInputMode === 'copy') WARN('Callback returned true but input mode is copy so not restarting from same');
+    if (lastIndex === REPEAT_FROM_SAME_TOKEN) {
+      if (copyInputMode === 'copy') WARN('Callback returned true but input mode is copy so not restarting from same');
+    } else {
+      sameLoopProtection = 2000; // how many rewrites does one take? :)
+    }
 
-    if (lastIndex === true && copyInputMode === 'nocopy') {
+    if (lastIndex === REPEAT_FROM_SAME_TOKEN && copyInputMode === 'nocopy') {
+      if (--sameLoopProtection < 0) throw 'same loop protection; started from same token more than 2000x, callback should probably not return true';
       // handler return true at least once, restart from same index if input mode is nocopy
       // (if copyInputMode=copy, starting from the same token would most likely mean loop)
       WARN('Callback returned true at least once, restarting from same token');
@@ -366,8 +379,9 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
 
     var explicitTrue = false;
 
-    var returnValue = true;
+    var returnValue = QUERY_NOT_MATCHED;
     if (matched) {
+      returnValue = QUERY_MATCHED;
       LOG('Queue implicit match call?', tokensMatched.slice(0),'->',tokensMatched[tokensMatched.length-1] !== EARLY_CALL);
       if (tokensMatched[tokensMatched.length-1] !== EARLY_CALL) {
         queueCall(argStack.slice(0));
@@ -376,14 +390,20 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
       callStack.forEach(function(args){
         // TOFIX: %
         var args = flushArgs(args); // may return null
+        var result = false;
 
         // if the handler returns `true`, the next match should start on the same index regardless
         if (!args) {
-          if (handler(token(start)) === true) explicitTrue = true;
+          result = handler(token(start));
         } else if (nonIntKeys) {
-          if (handler(args) === true) explicitTrue = true;
+          result = handler(args);
         } else {
-          if (handler.apply(undefined, args) === true) explicitTrue = true;
+          result = handler.apply(undefined, args);
+        }
+        WARN('handler result:', result);
+        if (result === true) {
+          WARN('handler returned true so check will return true');
+          explicitTrue = true;
         }
       });
 
@@ -392,15 +412,16 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     } else {
       // continue as usual
       if (repeatMode === 'after') returnValue = start;
-      else returnValue = false;
+      else returnValue = QUERY_NOT_MATCHED;
     }
 
     argStack.length = 0;
     callStack.length = 0;
     tokensMatched.length = 0;
 
-    if (explicitTrue) return true;
+    if (explicitTrue) return REPEAT_FROM_SAME_TOKEN;
     if (repeatMode === 'once' || repeatMode === 'after' || repeatMode === 'every') return returnValue;
+
     throw 'unknown repeatMode: '+repeatMode;
   }
 }

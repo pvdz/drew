@@ -3,6 +3,12 @@
 // but never mixed.
 // macros may reference constants directly. constants are always conditions (!)
 var macros = module.exports = {
+  // "system" customizable. these are vital to certain parts of Drew
+  //WHITESPACE: '[WHITE | ASI | EOF]', // determines whitespace skipping
+  '~': '[(WHITE & !NEWLINE) | ASI]*',
+
+  // alias
+
   SPACE: '` `',
   TAB: '`\t`',
 
