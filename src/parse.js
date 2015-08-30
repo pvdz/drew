@@ -211,7 +211,7 @@ function parse(query, hardcoded, macros) {
     }
 
     result =
-      '\n//#parseAtomMaybe('+insideToken+', '+matchStateNumber+', '+isTopLevelStart+', '+invert+') (parsed `'+query.slice(startpos, pos).replace(/\n/g, '\\n')+'`)\n'+
+      '\n//#parseAtomMaybe('+insideToken+', '+matchStateNumber+', '+isTopLevelStart+', '+invert+') (parsed `'+query.slice(startpos, pos).replace(/[\n\r\u2028\u2029]/g, '\u21b5')+'`)\n'+
       result +
       '// parseAtomMaybe end\n';
     return result;
@@ -224,16 +224,24 @@ function parse(query, hardcoded, macros) {
       assert('~');
       if (insideToken) reject('Tilde (~) only allowed outside of tokens');
 
+      var varCounter = ++counter;
+
+      // we are going to match ~ regardless. but it will only pass if either it's not
+      // at the start of the query (something else already consumed something), or the
+      // operator would be a noop because applying it did not increment the pointer.
       result +=
-        '{\n'+
-        '  if (matchedSomething) {\n'+
-        '    GROPEN("~ seek");\n'+
-        injectMacro(macros['~'], pos-1, pos, insideToken, matchStateNumber, isTopLevelStart, NOT_INVERSE)+
-        '    GRCLOSE();\n'+
-        '  } else {\n'+
-        '    LOG("Still at the start of the query so not applying ~");\n'+
-        '  }\n'+
-        '  group'+matchStateNumber+' = true; // the ~ seek passes regardless, there is no valid condition for failing and otherwise the query can never pass with ~ at the start\n'+
+        '{\n' +
+        '  GROPEN("~ seek");\n' +
+        '  var start'+varCounter+' = matchedSomething || index; // save to compare afterwards\n' +
+        injectMacro(macros['~'], pos - 1, pos, insideToken, matchStateNumber, isTopLevelStart, NOT_INVERSE) +
+        '  if (start'+varCounter+' !== true && start'+varCounter+' !== index) {\n' +
+        '    // if ~ is at query start and would not be a NOOP it does not "pass"\n' +
+        '    LOG("~ at start would not be a NOOP; so failing match");\n'+
+        '    index = start'+varCounter+';\n' +
+        '  } else {\n' +
+        '    group'+matchStateNumber+' = true; // the ~ seek passes regardless\n'+
+        '  }\n' +
+        '  GRCLOSE();\n' +
         '}\n'+
       '';
     } else if (peek('>') || peek('<')) {
@@ -250,8 +258,12 @@ function parse(query, hardcoded, macros) {
       if (peeked >= '0' && peeked <= '9') steps = parseNumbersAsInt();
 
       if (!steps) reject('Cannot use `'+steps+'`; it is an illegal number for moving the pointer forward');
-      result += 'if (matchedSomething) {\n';
-      result += 'GROPEN("'+symbol+(forBlack?symbol:'')+' '+steps+'x, start index="+index, tokens[index]);\n';
+
+      result +=
+        '{\n' +
+        '  GROPEN("'+symbol+(forBlack?symbol:'')+' '+steps+'x, start index="+index, tokens[index]);\n' +
+      '';
+
       if (forBlack) {
         // need to seek explicitly
         if (symbol === '<') { // <<
@@ -279,14 +291,16 @@ function parse(query, hardcoded, macros) {
         // just forward the pointer
         if (symbol === '<') {
           result += '// - its a white back skip (<) for '+steps+'x\n';
-          result += 'if (matchedSomething) index = Math.max(index - '+steps+', 0);'
+          result += 'index = Math.max(index - '+steps+', 0);'
         } else {
           result += '// - its a white skip (>) for '+steps+'x\n';
-          result += 'if (matchedSomething) index = Math.min(index + '+steps+', tokens.length);'
+          result += 'index = Math.min(index + '+steps+', tokens.length);'
         }
       }
-      result += 'GRCLOSE();\n';
-      result += '}\n';
+      result +=
+        '  GRCLOSE();\n'+
+        '}\n'+
+      '';
     } else if (peek('^')) {
       // start of line, or start of file if another ^ follows
       if (insideToken) reject('Caret (^) only allowed outside of tokens');
@@ -385,6 +399,7 @@ function parse(query, hardcoded, macros) {
         if (insideToken) reject('Expecting ors inside tokens to be caught in parseMatchConditions');
         startOfChain = 2; // first is immediately dec'ed, 2 makes sure it survives one loop
         s +=
+          '  LOG("group sub-end for OR");\n'+
           '  GRCLOSE();\n'+
           '}\n'+
           'if (group'+matchStateNumber+') {\n' +
@@ -430,7 +445,8 @@ function parse(query, hardcoded, macros) {
     if (!insideToken) {
       s +=
         '  if (!group'+matchStateNumber+') tokensMatched.length = tokensMatchGroupPointers.pop();\n'+
-        '  else tokensMatchGroupPointers.pop();\n'+
+        '  else tokensMatchGroupPointers.pop();\n' +
+        '  LOG("end of group");\n'+
         '  GRCLOSE();\n'+
         '}\n'+
       '';
@@ -498,32 +514,76 @@ function parse(query, hardcoded, macros) {
       var peeked = peek();
       if (peeked === '`') break;
 
-      if (peeked === '\\') {
-        s += query[pos++];
+      ++pos; // backslash (regardless)
+      switch (peeked) {
+        case '\\':
+          var escaped = query[pos].toLowerCase();
+          switch (escaped) {
+            case 'u':
+            case 'w':
+              var a = query[pos + 1].toLowerCase();
+              if ((a < '0' || a > '9') && (a < 'a' || a > 'f')) reject('Unicode escape must be 0-9a-f, was [' + a + ']');
+              var b = query[pos + 2].toLowerCase();
+              if ((b < '0' || b > '9') && (b < 'a' || b > 'f')) reject('Unicode escape must be 0-9a-f, was [' + b + ']');
+              var c = query[pos + 3].toLowerCase();
+              if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) reject('Unicode escape must be 0-9a-f, was [' + c + ']');
+              var d = query[pos + 4].toLowerCase();
+              if ((d < '0' || d > '9') && (d < 'a' || d > 'f')) reject('Unicode escape must be 0-9a-f, was [' + d + ']');
 
-        if (query[pos+1].toLowerCase() === 'u') {
-          var a = query[pos+2].toLowerCase();
-          if ((a < '0' || a > '9') && (a < 'a' || a > 'f')) reject('Unicode escape must be 0-9a-f, was ['+a+']');
-          var b = query[pos+3].toLowerCase();
-          if ((b < '0' || b > '9') && (b < 'a' || b > 'f')) reject('Unicode escape must be 0-9a-f, was ['+b+']');
-          var c = query[pos+4].toLowerCase();
-          if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) reject('Unicode escape must be 0-9a-f, was ['+c+']');
-          var d = query[pos+5].toLowerCase();
-          if ((d < '0' || d > '9') && (d < 'a' || d > 'f')) reject('Unicode escape must be 0-9a-f, was ['+d+']');
+              // w ("wide") takes 6
+              if (escaped === 'u') {
+                s += '\\u' + a + b + c + d;
+                pos += 5;
+              } else {
+                var e = query[pos + 5].toLowerCase();
+                if ((e < '0' || e > '9') && (e < 'a' || e > 'f')) reject('Unicode escape must be 0-9a-f, was [' + e + ']');
+                var f = query[pos + 6].toLowerCase();
+                if ((f < '0' || f > '9') && (f < 'a' || f > 'f')) reject('Unicode escape must be 0-9a-f, was [' + f + ']');
+                s += '\'+String.fromCharCode(' + parseInt(a + b + c + d + e + f, 16) + ')+\'';
+                pos += 7;
+              }
+              break;
 
-          s += 'u'+a+b+c+d;
-        } else if (query[pos+1].toLowerCase() === 'x') {
-          var a = query[pos+2].toLowerCase();
-          if ((a < '0' || a > '9') && (a < 'a' || a > 'f')) reject('Unicode escape must be 0-9a-f, was ['+a+']');
-          var b = query[pos+3].toLowerCase();
-          if ((b < '0' || b > '9') && (b < 'a' || b > 'f')) reject('Unicode escape must be 0-9a-f, was ['+b+']');
+            case 'x':
+              var a = query[pos + 1].toLowerCase();
+              if ((a < '0' || a > '9') && (a < 'a' || a > 'f')) reject('Unicode escape must be 0-9a-f, was [' + a + ']');
+              var b = query[pos + 2].toLowerCase();
+              if ((b < '0' || b > '9') && (b < 'a' || b > 'f')) reject('Unicode escape must be 0-9a-f, was [' + b + ']');
+              s += '\\x' + a + b;
+              pos += 3;
+              break;
 
-          s += 'x'+a+b;
-        } else {
-          s += query[pos++];
-        }
-      } else {
-        s += query[pos++];
+            case '\\':
+              s += '\\\\';
+              ++pos;
+              break;
+
+            default:
+              ++pos;
+              s += '\\\\' + escaped;
+              break;
+          }
+          break;
+
+        // newlines must be properly escaped because this is translated to a JavaScript string
+        // JS defines 4 different newlines, but at least that's all
+        case '\n':
+          s += '\\n';
+          break;
+        case '\r':
+          s += '\\r';
+          break;
+        case '\u2028':
+          s += '\\u2028';
+          break;
+        case '\u2029':
+          s += '\\u2029';
+          break;
+        case '\'':
+          s += '\\\'';
+          break;
+        default:
+          s += peeked;
       }
     }
     if (protection <= 0) {debugger; throw 'loop protection'; }
@@ -531,10 +591,9 @@ function parse(query, hardcoded, macros) {
     var ci = peek('i');
     if (ci) ++pos;
 
-    var r = s.replace(/'/g, '\\\'');
+    var q = ' && !void LOG("# '+(++logCounter)+' start of literal [`%o`] at '+pos+' in query to token "+index+":", "'+ s.replace(/"/g,'\\"').replace(/[\n\r\u2028\u2029]/g, '\u21b5')+'", token())';
+    var t = ' && '+(invert?'!':'')+'is'+(ci?'i':'')+'(\'' + s + '\')';
 
-    var q = ' && !void LOG("# '+(++logCounter)+' start of literal [`%o`] at '+pos+' in query to token "+index+":", "'+ r.replace(/"/g,'\"')+'", token())';
-    var t = ' && '+(invert?'!':'')+'is'+(ci?'i':'')+'(\'' + r + '\')';
     return q + t;
   }
   function parseRegex() {
@@ -796,8 +855,8 @@ function parse(query, hardcoded, macros) {
 
   return (
     'function query(){\n'+
-    '  // input query: '+inputQuery+'\n' +
-    '  // final query: '+query+'\n' +
+    '  // input query: '+inputQuery.replace(/[\n\r\u2028\u2029]/g, '\u21b5')+'\n' +
+    '  // final query: '+query.replace(/[\n\r\u2028\u2029]/g, '\u21b5')+'\n' +
 //  '  if(index===2)debugger;'+
     '  // query start..\n' +
        code+'\n' +

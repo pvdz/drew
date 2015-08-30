@@ -459,9 +459,11 @@ You can't use this to get a callback on a partial match since stuff is queued la
 
 Outside a token context you can use `~` to seek up to the next black token or newline. This will keep consuming whitespace until the current token is black or a newline. This will not consume anything if the current token is already black, a newline, the first token of input, or EOF.
 
-While not required to be used in conjunction, this is available to use `^` and `$` because other mechanisms would consume the token. But beware that `{A}` is not exactly the same as `~[A]`; the tilde (`~`) will stop seeking after the first newline and won't seek at the start of input. The curly brackets do continue to seek in those cases.
+While not required to be used in conjunction, this is available to use with `^` and `$` because other mechanisms would consume the token. But beware that `{A}` is not exactly the same as `~[A]`; the tilde (`~`) will stop seeking after the first newline and won't seek at the start of input. The curly brackets do continue to seek in those cases.
 
-_In Regex terms, this is similar to skipping as long as the current token matches `/[ \t]/`._
+In truth the `~` is mapped to a macro (read below) because they are input language sensitive. For example in plain text you can just skip spaces and tabs. In JavaScript you'll want to skip ASI and comments as well. Other languages have other requirements. 
+
+_The idea is that, in Regex terms, this is similar to skipping as long as the current token matches `/[ \t]/`. But hey if you want to redefine it to unconditionally skip backslashes that's fine too._
 
 ## > < >> << Skip one white or black token
 
@@ -473,8 +475,6 @@ Sometimes you may want to manipulate the pointer directly. You can use `>` or `<
 - `<<` = move the pointer back to before the first previous black token
 
 These skips are unconditional. So if you want to skip 5 tokens but there are only 3 to skip, the match doesn't fail. The pointer will simply be at the start or end.
-
-When used at the start of a query they are ignored so effectively useless... (use backjumps after matching something for the same effect)
 
 If you need to jump more than one token, you can add a number to have Drew do this many jumps. So `>>5` skips the next five black tokens (similar to `{*}5`, though unconditionally).
 

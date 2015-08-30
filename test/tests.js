@@ -28,6 +28,25 @@ var tests = module.exports = {
       INPUT_NO_COPY,
       'bb'
     ],
+    [
+      '[`\'`]',
+      '\'',
+      '@',
+      'matching a single quote in a literal should work',
+    ],
+    [
+      '[`"`]',
+      '"',
+      '@',
+      'matching a double quote in a literal should work',
+    ],
+    // i dont think we can make this example because there's no valid single token to contain a single quote and newline
+    //[
+    //  '[`\'\\w00000a`]',
+    //  '\'\n',
+    //  '@',
+    //  'make sure single quotes dont accidentally pass the previous test',
+    //],
   ],
   js: [
     [
@@ -276,8 +295,8 @@ var tests = module.exports = {
     [
       '~^{`a`}',
       '  a;\nb;',
-      '  @;\nb;',
-      '~ means consume any space/tab/comment. then check for ^'
+      '@ a;\nb;',
+      '~ means consume any space/tab/comment. then check for ^. Match starts at ^, so at the start'
     ],
     [
       '~^^~[`a`]',
@@ -1638,7 +1657,7 @@ var tests = module.exports = {
       '((>|[`x`])[`;`])=0,1',
       '  x;',
       '  x$', // >; matches first so match starts at ;
-      'should trigger a match only once and ignore the > symbols',
+      'silly test because > will always match (so it never reaches [x])',
       REPEAT_EVERY,
       INPUT_NO_COPY,
     ],
@@ -1653,12 +1672,43 @@ var tests = module.exports = {
     [
       '((>|[`x`])~[`;`])=0,1',
       'x    ;',
-      'x    ;', // >; matches first so match starts at ;
+      'x    $', // >; matches first so match starts at ;
       // the `>~;` query should start at ; but the `x~;` should start at x
       // the x start should therefor match first
-      'should match at x, refutes that "matchedSomething" can be determined at compile time, unless we tear it apart...',
+      'silly test because > will always match (so it never reaches [x])',
       REPEAT_ONCE,
       INPUT_NO_COPY,
+    ],
+
+    [
+      '[`\n`]',
+      '\n',
+      '@',
+      'matching a newline in a literal should work',
+    ],
+    [
+      '[`\\u000a`]',
+      '\n',
+      '@',
+      '\\u unicode escaped character in a literal',
+    ],
+    [
+      '[`\\x0a`]',
+      '\n',
+      '@',
+      '\\x escaped character in a literal',
+    ],
+    [
+      '[`\\w00000a`]',
+      '\n',
+      '@',
+      '\\w unicode escaped character in a literal',
+    ],
+    [
+      '[`\'\\\\\\w00000a\'`]',
+      '\'\\\n\'',
+      '@',
+      'make sure single quotes _are_ escaped while the \\w stuff is _not_',
     ],
 
     // test that calls repeats (repeat or collect) but doesnt meet minimal quantity, trackback to another repeater...
