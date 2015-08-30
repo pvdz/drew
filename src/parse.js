@@ -710,19 +710,22 @@ function parse(query, hardcoded, macros) {
 
       if (!peek('.')) {
         max = min;
-      } else {
-        // note: this allows the dots to be spaced, but who cares. this doesn't allow ambiguity and I couldnt care less.
-        assert('.');
-        assert('.');
-        peeked = peek();
-        if (peeked === '.') {
-          assert('.');
+      } else if (query[pos+1] === '.') {
+        pos += 2;
+
+        if (query[pos] === '.') {
+          consume('.');
           max = 0;
-        } else if (peeked < '0' || peeked > '9') {
-          reject('expecting number after double dot');
         } else {
-          max = parseNumbersAsInt();
+          peeked = peek();
+          if (!(peeked > '0' && peeked < '9')) {
+            reject('expecting number after double dot');
+          } else {
+            max = parseNumbersAsInt();
+          }
         }
+      } else { // only one dot
+        reject('expecting two or three dots after the first optional number in a quantifier');
       }
     }
 
