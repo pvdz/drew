@@ -453,19 +453,21 @@ It's possible to trigger a callback multiple times, even from mid-way a query. A
 Can appear anywhere where a token may start. They can have an optional designator and optional colon-comment.
 You can't use this to get a callback on a partial match since stuff is queued lazily and discarded when the match turns out to fail.
 
-# Pointer manipulation
+# Pointer manipulation (seeking)
 
-## ~ Seeking past spaces, tabs, and comments
+Drew offers a few ways to seek explicitly with and without being a match condition.
 
-Outside a token context you can use `~` to seek up to the next black token or newline. This will keep consuming whitespace until the current token is black or a newline. This will not consume anything if the current token is already black, a newline, the first token of input, or EOF.
+## ~ Customizable conditional seek
 
-While not required to be used in conjunction, this is available to use with `^` and `$` because other mechanisms would consume the token. But beware that `{A}` is not exactly the same as `~[A]`; the tilde (`~`) will stop seeking after the first newline and won't seek at the start of input. The curly brackets do continue to seek in those cases.
+Outside a token context you can use `~` to seek in a custom way. The symbol is defined as a macro in macros.js and allows you to seek an arbitrary (sub)query.
 
-In truth the `~` is mapped to a macro (read below) because they are input language sensitive. For example in plain text you can just skip spaces and tabs. In JavaScript you'll want to skip ASI and comments as well. Other languages have other requirements. 
+The original intent was to have `~` be a way to seek towards the next newline or black token. To use in conjunction with the line start/stop matchers (`^` etc.). But since every language needs its own definitions of what to skip in such case there was no simple way to generalize on that. Plain text will want to skip spaces and tabs but JavaScript will also want to skip comments and ASI tokens.
 
-_The idea is that, in Regex terms, this is similar to skipping as long as the current token matches `/[ \t]/`. But hey if you want to redefine it to unconditionally skip backslashes that's fine too._
+One special behavior of `~` is that it must be a NOOP to "match" as long as no other part of the query has matched. This is an optimization step. Drew will still try to match the query but if it seeked any tokens while no other part has matched anything yet, the `~` will fail and backtracking/bailing starts.
 
-## > < >> << Skip one white or black token
+By default `~` is implemented as skipping all spaces and tabs for plain text and as skipping spaces, tabs, comments, and ASI's in JavaScript. Though you can change that as well of course.
+
+## > < >> << Skip one white or black token unconditionally
 
 Sometimes you may want to manipulate the pointer directly. You can use `>` or `<` to move one white token forward or backwards. You can use `>>` or `<<` to move one black token forward or backwards.
 
@@ -476,7 +478,7 @@ Sometimes you may want to manipulate the pointer directly. You can use `>` or `<
 
 These skips are unconditional. So if you want to skip 5 tokens but there are only 3 to skip, the match doesn't fail. The pointer will simply be at the start or end.
 
-If you need to jump more than one token, you can add a number to have Drew do this many jumps. So `>>5` skips the next five black tokens (similar to `{*}5`, though unconditionally).
+If you need to jump more than one token, you can add a number to have Drew do this many jumps. So `>>5` skips the next five black tokens (similar to `{*}5`, though that will fail if there aren't enough tokens to skip).
 
 Be careful! This mechanisms may allow you to cause infinite loops. There are awol loop protections in place but you don't want to trigger them.
 
@@ -502,6 +504,20 @@ stuff;
 ```
 
 I had a query that would eliminate console stuff AND blocks that weren't part of another statement. I used something like `({console}{.}{log}{parens}{semi_pair})|({semi}{curly_pair})` for this. The first part would match but then Drew would continue after this match and the semi colon would not be seen, meaning the second part would not match this example. Adding `<<` to the query would fix it.
+
+## --> Skip while next atom does not match
+
+This is a special operator that means to skip the following atom (token or group) as long as the next atom cannot be parsed. The idea is that you don't have to duplicate your code like `[!foo]*[foo]` vs `-->[foo]`.
+
+```
+run('xxxxyyyyy', '[`x`]-->([`y`]+)');
+// similar to
+run('xxxxyyyyy', '[`x`]!([`y`]+)*([`y`]+)');
+```
+
+It is a runtime error for `-->` to occur before any other part of the query matched. This is for your own protection; This is basically what Drew does already so you'd be doing it twice.
+
+While `-->` itself is not a matching condition, it will keep trying until the EOF. So if it reaches EOF it will stop scanning but that does mean that whatever it was trying to find also was not found and the match fails anyways. So you may as well see it as a matching condition :) But Drew fails it on account of the context not being matched.
 
 ## Multiple calls
 

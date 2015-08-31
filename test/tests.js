@@ -1711,21 +1711,29 @@ var tests = module.exports = {
       'make sure single quotes _are_ escaped while the \\w stuff is _not_',
     ],
 
+    [
+      '[`var`]-->[`;`]=,1',
+      'var foo = 15;',
+      '@ foo = 15$',
+      'arrow, should seek for next atom until it finds it',
+    ],
+    [
+      '[`var`]-->({NUMBER}{`;`})=,1',
+      'var foo = 15;',
+      '@ foo = 15$',
+      'arrow, should seek for next atom until it finds it',
+    ],
+    [
+      '[`var`]-->({IDENTIFIER}{`;`})=,1',
+      'var foo = 15;',
+      'var foo = 15;',
+      'arrow, should not find this and fail',
+    ],
+
     // test that calls repeats (repeat or collect) but doesnt meet minimal quantity, trackback to another repeater...
     // test that repetitive callback is not called until min repetitions are seen
     // test invert and backtracking
     // test to confirm the implicit callback is not called when quantified callbacks end and match the query
-
-// define macros first...
-//    '#(SOF_WHITES, ([SOF & WHITE][WHITE]*)=0,1)' +
-//    '#(NEWLINE_WHITES, [NEWLINE][WHITE]*=0,1)' +
-//    '(SOF_WHITES|NEWLINE_WHITES) {FUNCTION}{IDENTIFIER}=2',
-
-// ignore tokens until match, like a [*] except instead of [!foo]*[foo] you do [>>foo]
-// [>>][foo] to assign it? meaning the same as [>>foo] except you can get the >> part in args too?
-// otoh you could get that by other means; `[*]=,0 [>>function]=1,2` -> start of skipped = arg0+1, end of skipped = arg1-1
-// >> for "must be on same line" ([!foo & !NEWLINE]*[foo], >>> for "any token"
-
     // repeat match condition quantifier
     // repeated quantifier groups range start seems to reset at each (subsequent) match
   ]

@@ -15,6 +15,8 @@ function parse(query, hardcoded, macros) {
   var INSIDE_TOKEN = true;
   var OUTSIDE_TOKEN = false;
   var OPTIONAL = true;
+  var MANDATORY = false;
+  var TOKEN_OR_GROUP_ONLY = true;
   var NOT_INVERSE = false;
   var FORCE_PARAMFILL = true;
   var NORMAL_CALL = 0;
@@ -125,7 +127,10 @@ function parse(query, hardcoded, macros) {
     return s;
   }
 
-  function parseAtomMaybe(insideToken, matchStateNumber, isTopLevelStart, invert){
+  function parseAtomMaybe(insideToken, matchStateNumber, isTopLevelStart, invert) {
+    return parseAtom(insideToken, matchStateNumber, isTopLevelStart, invert, OPTIONAL);
+  }
+  function parseAtom(insideToken, matchStateNumber, isTopLevelStart, invert, optional, tokenOrGroupOnly) {
     lastAtomStart = pos;
     var startpos = pos; // for debugging
     var currentCounter = counter++;
@@ -167,9 +172,9 @@ function parse(query, hardcoded, macros) {
         result += '// - its a _nested_ group\n';
         beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, matchStateNumber, NOT_TOPLEVEL_START) + ')';
 
-        result += (insideToken?'&& (':'{\n') + 'matchedSomething = true' + (insideToken?')':';\n');
+        result += (insideToken ? '&& (' : '{\n') + 'matchedSomething = true' + (insideToken ? ')' : ';\n');
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, matchStateNumber, currentCounter, insideToken);
-        result += (insideToken?'':'}\n');
+        result += (insideToken ? '' : '}\n');
       } else {
         result += '// - its a outer group\n';
 
@@ -191,6 +196,9 @@ function parse(query, hardcoded, macros) {
 
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, matchStateNumber, currentCounter);
       }
+    } else if (tokenOrGroupOnly) {
+      if (!optional) reject('Expected to parse token or group only');
+      return '';
     } else if (peek('#')) {
       result += '// an explicit callback (#)\n';
       assert('#');
@@ -204,7 +212,7 @@ function parse(query, hardcoded, macros) {
       result += 'queueEarlyCall("' + id + '");\n';
     } else {
       // at this point it must be a top level ^ ^^ $ $$ or ~, or nothing.
-      var r = parseLineStuff(insideToken, matchStateNumber, isTopLevelStart, OPTIONAL);
+      var r = parseSeeks(insideToken, matchStateNumber, isTopLevelStart, optional);
       if (!r) return r;
       result += '// - it must be a line start or end or tilde...\n';
       result += r;
@@ -217,8 +225,8 @@ function parse(query, hardcoded, macros) {
     return result;
   }
 
-  function parseLineStuff(insideToken, matchStateNumber, isTopLevelStart, optional) {
-    var result = '//#parseLineStuff('+insideToken+', '+matchStateNumber+', '+optional+')\n';
+  function parseSeeks(insideToken, matchStateNumber, isTopLevelStart, optional) {
+    var result = '//#parseSeeks('+insideToken+', '+matchStateNumber+', '+optional+')\n';
 
     if (peek('~')) {
       assert('~');
@@ -343,6 +351,21 @@ function parse(query, hardcoded, macros) {
       result += 'matchedSomething = true;\n';
       result += 'GRCLOSE();\n';
       result += '}\n';
+    } else if (peek('-') && query[pos+1] === '-' && query[pos+2] === '>') {
+      pos += 3;
+
+      // so basically we try to match the next token and bump the index while we dont
+      result +=
+        'do {\n'+
+        '  if (!matchedSomething) throw "Arrow (-->) not allowed at the start of a query";\n'+
+        '  LOG("--> parsing until we find next atom, from:", index, tokens[index]);\n'+
+        '  group'+matchStateNumber+' = true; // need to set this or atom wont parse, will be overriden immediately anyways\n'+
+        parseAtom(OUTSIDE_TOKEN, matchStateNumber, isTopLevelStart, NOT_INVERSE) + // restrict to tokens and groups...
+        '  // increase index by one as long as we dont match\n'+
+        '  if (group'+matchStateNumber+') LOG("Next atom found");\n'+
+        '} while (!group'+matchStateNumber+' && ++index < tokens.length-1);\n' +
+      '';
+
     } else if (optional) {
       return false;
     } else {
@@ -428,7 +451,7 @@ function parse(query, hardcoded, macros) {
         else reject('No need to put & between tokens (just omit them), only allowed between match conditions');
       } else {
 
-        var linestuff = parseLineStuff(insideToken, matchStateNumber, NOT_TOPLEVEL, OPTIONAL)
+        var linestuff = parseSeeks(insideToken, matchStateNumber, NOT_TOPLEVEL, OPTIONAL)
 
         if (linestuff) {
           s += linestuff;
@@ -670,6 +693,8 @@ function parse(query, hardcoded, macros) {
     if (peek('=')) {
       assert('='); // take =, skip whitespace
 
+      assignmentString += ' /* = */ ';
+
       if (peek(',')) { // [foo]=,1
         assignmentString += ', undefined';
       } else {
@@ -685,7 +710,10 @@ function parse(query, hardcoded, macros) {
         assignmentString += ', undefined';
       }
     } else if (forced) {
+      assignmentString += ' /* no assignment */ ';
       assignmentString += ', undefined, undefined';
+    } else {
+      assignmentString += ' /* no assignment */ ';
     }
 
     return assignmentString;
@@ -760,10 +788,11 @@ function parse(query, hardcoded, macros) {
       consume();
     } else if (peeked === undefined) {
       // EOF
-      return beforeAssignments + parseAssignments() + afterAssignments;
+      // TOFIX: we can drop the parseAssignments call here I think?
+      return beforeAssignments + ' /* EOF */ ' + parseAssignments() + afterAssignments;
     } else if (peeked < '0' || peeked > '9') {
       // no quantifier. dont wrap string.
-      return beforeAssignments + parseAssignments() + afterAssignments;
+      return beforeAssignments + ' /* no quantifier */ ' + parseAssignments() + afterAssignments;
     } else {
       min = parseNumbersAsInt();
 
