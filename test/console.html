@@ -5,6 +5,8 @@
 <script src="../lib/zeparser2/tok.js"></script>
 <script src="../lib/zeparser2/par.js"></script>
 
+<script src="../lib/splitter.js"></script>
+
 <script src="../src/constants.js"></script>
 <script src="../src/macros.js"></script>
 <script src="../src/parse.js"></script>
@@ -48,6 +50,12 @@
       <div style="float: left;">
         <button id="go" style="font-weight: bold;">Process query in Drew</button>
       </div>
+      <div style="float: left; border: 1px solid black; margin-left: 5px; padding: 0 5px;">
+        Language:
+        <input type="radio" name="language" value="txt"> plain text
+        <input type="radio" name="language" value="js" checked> JavaScript
+        <input type="radio" name="language" value="css"> CSS
+      </div>
       <div style="float: left; border: 1px solid black; margin-left: 5px; margin-bottom: 2px; padding: 0 5px;">
         Repeat mode:
         <input type="radio" name="repeatMode" value="once"> once
@@ -74,6 +82,7 @@
     <button id="save">save</button>
     <button id="delete">delete</button>
     <button id="reset">remove localStorage</button>
+    <button id="pi" title="see console">&pi;</button>
   </div>
   <div>Query:
     <button id="parse">parse</button>
@@ -137,6 +146,7 @@ while (have)
 
     document.querySelector('#debug').value = '';
     var rule = document.querySelector('#query').value;
+    var language = document.querySelector('[name="language"]:checked').value;
     var repeatMode = document.querySelector('[name="repeatMode"]:checked').value;
     var copyInputMode = document.querySelector('[name="copyInputMode"]:checked').value;
     VERBOSE = document.querySelector('[name="verbosity"]:checked').value !== 'silent'; // also resets dead mans switch
@@ -150,20 +160,34 @@ while (have)
     LOG(handler);
 
     var funcCode = parse(rule, constants, macros);
-    window.TOKENS = Par.parse(input, {saveTokens: true});
+    switch (language) {
+      case 'txt':
+        document.querySelector('#debug').value += 'Tokenized input as plain text (one character per token)\n\n';
+        window.TOKENS = split(input);
+        break;
+
+      case 'js':
+        document.querySelector('#debug').value += 'Tokenized input as JavaScript (as per ZeParser2)\n\n';
+        window.TOKENS = Par.parse(input, {saveTokens: true}).whites;
+        break;
+
+      case 'css':
+        throw 'tbd';
+    }
+
     LOG(funcCode);
     LOG('tokens:', TOKENS);
 
-    run(TOKENS.whites, funcCode, handler, repeatMode, copyInputMode);
+    run(TOKENS, funcCode, handler, repeatMode, copyInputMode);
 
-    document.querySelector('#output').value = TOKENS.whites.map(function (t) {
+    document.querySelector('#output').value = TOKENS.map(function (t) {
       return t.value;
     }).join('');
   };
 
   function fillDropdown(selected) {
     try {
-      var x = JSON.parse(localStorage.getItem('DREw-examples'));
+      var x = JSON.parse(localStorage.getItem('Drew-examples'));
       if (x) consoleExamples = x;
     } catch(e){}
 
@@ -200,6 +224,9 @@ while (have)
     } else {
       document.querySelector('#desc').value = d.desc;
       document.querySelector('#query').value = d.query;
+      document.querySelector('[value="txt"]').checked = d.language === 'txt';
+      document.querySelector('[value="js"]').checked = d.language === 'js';
+      document.querySelector('[value="css"]').checked = d.language === 'css';
       document.querySelector('[value="once"]').checked = d.repeat === 'once';
       document.querySelector('[value="after"]').checked = d.repeat === 'after';
       document.querySelector('[value="every"]').checked = d.repeat === 'every';
@@ -213,6 +240,19 @@ while (have)
     }
   };
 
+  function populate(obj) {
+    obj.desc = document.querySelector('#desc').value || 'untitled';
+    obj.query = document.querySelector('#query').value;
+    obj.input = document.querySelector('#input').value;
+    obj.handlerargs = document.querySelector('#args').value;
+    obj.handler = document.querySelector('#handler').value;
+    obj.repeat = document.querySelector('[name="repeatMode"]:checked').value;
+    obj.copy = document.querySelector('[name="copyInputMode"]:checked').value;
+    obj.language = document.querySelector('[name="language"]:checked').value;
+
+    return obj;
+  }
+
   document.querySelector('#save').onclick = function(){
     var desc = document.querySelector('#desc').value;
     if (!desc) desc = 'untitled';
@@ -220,15 +260,9 @@ while (have)
     for (var i=0; i<consoleExamples.length; ++i) if (consoleExamples[i].desc === desc) obj = consoleExamples[i];
     if (!obj) consoleExamples.push(obj = {});
 
-    obj.desc = desc;
-    obj.query = document.querySelector('#query').value;
-    obj.input = document.querySelector('#input').value;
-    obj.handlerargs = document.querySelector('#args').value;
-    obj.handler = document.querySelector('#handler').value;
-    obj.repeat = document.querySelector('[value="once"]').checked ? 'once' : document.querySelector('[value="after"]').checked ? 'after': 'every';
-    obj.copy = document.querySelector('[value="nocopy"]').checked ? 'nocopy' : 'copy';
+    populate(obj);
 
-    localStorage.setItem('DREw-examples', JSON.stringify(consoleExamples));
+    localStorage.setItem('Drew-examples', JSON.stringify(consoleExamples));
 
     fillDropdown(desc);
   };
@@ -249,11 +283,14 @@ while (have)
       }
     }
 
-    localStorage.setItem('DREw-examples', JSON.stringify(consoleExamples));
+    localStorage.setItem('Drew-examples', JSON.stringify(consoleExamples));
   };
 
   document.querySelector('#reset').onclick = function() {
-    localStorage.removeItem('DREw-examples');
+    localStorage.removeItem('Drew-examples');
   };
 
+  document.querySelector('#pi').onclick = function() {
+    console.log(JSON.stringify(populate({})));
+  };
 </script>

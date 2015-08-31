@@ -10,6 +10,7 @@ var consoleExamples = [
     handler: "document.querySelector('#debug').value += 'callback called with '+arguments.length+' arguments\\n\\n';\n\nparenStop.value += ' {';\ncurlyOpen.value = '';\nwhiteStart.value = '';\nwhiteStop.value = '';",
     repeat: 'after',
     copy: 'nocopy',
+    language: 'txt',
   },
   {
     desc: 'complex: remove console stuff and useless blocks',
@@ -19,6 +20,7 @@ var consoleExamples = [
     handler: 'try {\n  document.querySelector(\'#debug\').value += \'match callback: \'+arguments.length+\': \'+JSON.stringify([].slice.call(arguments, 0))+\'\\n\\n\';\n} catch (e) {\n  document.querySelector(\'#debug\').value += \'match callback: \'+arguments.length+\': (json stringify failed)\';\n}\n\n// the block is assigned to third and fourth arg, if they exist, only remove them and nothing in between\nif (curlyOpen && curlyClose) {\n  curlyOpen.value = \'\';\n  curlyClose.value = \'\';\n  // it was a match, not a block, so must be a console expression. remove the whole range\n} else if (cleanStart && cleanStop) {\n  for (var i=cleanStart.white; i<=cleanStop.white; ++i) {\n    TOKENS.whites[i].value = \'\';\n  }\n}\n',
     repeat: 'every',
     copy: 'copy',
+    language: 'js',
   },
   {
     desc: 'match parens',
@@ -28,6 +30,7 @@ var consoleExamples = [
     handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\nmatch1.value = \'#\';\nmatch2.value = \'#\'',
     repeat: 'after',
     copy: 'nocopy',
+    language: 'js',
   },
   {
     desc: 'match curlies',
@@ -37,6 +40,7 @@ var consoleExamples = [
     handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\nmatch1.value = \'#\';\nmatch2.value = \'#\'',
     repeat: 'after',
     copy: 'nocopy',
+    language: 'js',
   },
   {
     desc: 'match simple cases',
@@ -46,6 +50,7 @@ var consoleExamples = [
     handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\ncasekeyword.value = \'#\';\ncondition.value = \'$\';\ncolon.value = \'%\';',
     repeat: 'after',
     copy: 'nocopy',
+    language: 'js',
   },
   {
     desc: 'macro example ADDITION',
@@ -55,6 +60,7 @@ var consoleExamples = [
     handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\na.value = \'#\';\nb.value = \'$\';',
     repeat: 'after',
     copy: 'nocopy',
+    language: 'js',
   },
   {
     desc: 'eliminate LOGs from generated content',
@@ -64,6 +70,7 @@ var consoleExamples = [
     handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\nfor (var i=a.white; i<=b.white; ++i) {\n  TOKENS.whites[i].value = \'\';\n}',
     repeat: 'after',
     copy: 'nocopy',
+    language: 'js',
   },
   {
     desc: 'eliminate comments from generated content',
@@ -73,6 +80,7 @@ var consoleExamples = [
     handler: 'document.querySelector(\'#debug\').value += \'callback called with \'+arguments.length+\' arguments\\n\\n\';\n\na.value = \'\';\n',
     repeat: 'after',
     copy: 'nocopy',
+    language: 'js',
   },
   {
     desc: 'cleanup artifacts afterwards',
@@ -82,7 +90,18 @@ var consoleExamples = [
     handler: '\nif (a && b) {\ndocument.querySelector(\'#debug\').value += \'block called with \'+arguments.length+\' arguments\\n\\n\';\n  a.value = \'\';\n  b.value = \'\';\n}\n\n\nif (c && d) {\n  document.querySelector(\'#debug\').value += \'empty line called with \'+arguments.length+\' arguments\\n\\n\';\n  for (var i=c.white; i<=d.white; ++i) TOKENS.whites[i].value = \'\';\n}',
     repeat: 'every',
     copy: 'copy',
+    language: 'js',
   },
+  {
+    desc: 'plain text example',
+    query: '[`x`][`x`][`y`]=,1',
+    input: 'xxxyxy xxxxyxxxyx xxyxxxyx xxyxyx xxyxxyx xxyxyxxx',
+    handlerargs: 'start, stop',
+    handler: "document.querySelector('#debug').value += 'callback called with '+arguments.length+' arguments\\n\\n';\n\nstart.value = '@';\nstop.value = '$';",
+    repeat: 'every',
+    copy: 'nocopy',
+    language: 'txt',
+  }
 ];
 
 consoleExamplesBak = consoleExamples.slice(0);
