@@ -338,14 +338,13 @@ function parse(query, hardcoded, macros) {
         assert('$');
         assert('$');
         result += 'LOG(tokens[index]);\n';
-        result += 'LOG("$$ end of file?", index, ">=", tokens.length-1, "->", index >= tokens.length-1);\n';
-        // TOFIX: we need to improve the EOF check. this will crap out generically
-        result += 'group' + matchStateNumber + ' = index >= tokens.length-1;';
+        result += 'LOG("$$ end of file?", isEof());\n';
+        result += 'group' + matchStateNumber + ' = isEof();';
         result += ' // $$\n'
       } else {
         assert('$');
-        result += 'LOG("$ end of line?", "eol=", index < tokens.length-1 && isNewline(0), "eof=", index >= tokens.length-1);\n';
-        result += '(group' + matchStateNumber + ' = (index >= tokens.length-1 || isNewline(0)));';
+        result += 'LOG("$ end of line?", "eol=", isEof() || isNewline(0), "eof=", isEof());\n';
+        result += '(group' + matchStateNumber + ' = (isEof() || isNewline(0)));';
         result += ' // $\n';
       }
       result += 'matchedSomething = true;\n';
@@ -355,15 +354,20 @@ function parse(query, hardcoded, macros) {
       pos += 3;
 
       // so basically we try to match the next token and bump the index while we dont
+      var loopId = ++counter;
       result +=
-        'do {\n'+
-        '  if (!matchedSomething) throw "Arrow (-->) not allowed at the start of a query";\n'+
-        '  LOG("--> parsing until we find next atom, from:", index, tokens[index]);\n'+
-        '  group'+matchStateNumber+' = true; // need to set this or atom wont parse, will be overriden immediately anyways\n'+
+        '{\n' +
+        '  var protect'+loopId+' = 10000;\n'+
+        '  do {\n'+
+        '    if (!matchedSomething) throw "Arrow (-->) not allowed at the start of a query";\n'+
+        '    LOG("--> parsing until we find next atom, from:", index, tokens[index]);\n'+
+        '    group'+matchStateNumber+' = true; // need to set this or atom wont parse, will be overriden immediately anyways\n'+
         parseAtom(OUTSIDE_TOKEN, matchStateNumber, isTopLevelStart, NOT_INVERSE) + // restrict to tokens and groups...
-        '  // increase index by one as long as we dont match\n'+
-        '  if (group'+matchStateNumber+') LOG("Next atom found");\n'+
-        '} while (!group'+matchStateNumber+' && ++index < tokens.length-1);\n' +
+        '    // increase index by one as long as we dont match\n'+
+        '    if (group'+matchStateNumber+') LOG("Next atom found");\n'+
+        '  } while (!group'+matchStateNumber+' && ++index && !isEof() && --protect'+loopId+' > 0);\n' +
+        '  if (protect'+loopId+' <= 0) debugger;// throw "loop protection (seek)";\n' +
+        '}\n' +
       '';
 
     } else if (optional) {
@@ -458,7 +462,7 @@ function parse(query, hardcoded, macros) {
           toplevelStartStatus = NOT_TOPLEVEL_START;
         } else {
           // group
-          // TOFIX: something's weird here.
+          // TOFIX: something's weird here. I think group should be parsed elsewhere
           s += parseMatchConditions(insideToken, matchStateNumber, toplevelStart, NOT_INVERSE);
           toplevelStartStatus = NOT_TOPLEVEL_START; // ?
         }
@@ -480,14 +484,18 @@ function parse(query, hardcoded, macros) {
   }
 
   function parseMatchConditions(insideToken, matchStateNumber, toplevelStart, invert){
+    // from parseGroup, parseToken (black/white), or parseMacro which could be anything
     if (matchStateNumber === MATCH_STATE_NUMBER_IRRELEVANT && insideToken !== INSIDE_TOKEN) reject('expect a match state number when not inside a token');
 
     var s = parseMatchParticle(insideToken, matchStateNumber, toplevelStart, invert);
     while (consumeWhites() || peek('|') || peek('&')) {
-      var d = consume();
+      // toplevel outer | is caught by parseQuery
+      // group outer is caught by parseGroup
+      // group inner is caught by parseGroup
+      // so this could only be token inner
+      if (!insideToken) throw 'Expect outer | to be causght by parseQuery or parseGroup, outer & is illegal regardless';
 
-      // TOFIX: what happens if insideToken is false? the expression should end up weird? need to build test case for that
-      if (!insideToken) reject('fixme')
+      var d = consume();
       s = ' && (true' + s + ' ' + d + d + ' (true' + parseMatchParticle(insideToken, matchStateNumber, NOT_TOPLEVEL_START, NOT_INVERSE) + '))';
     }
 
@@ -609,7 +617,7 @@ function parse(query, hardcoded, macros) {
           s += peeked;
       }
     }
-    if (protection <= 0) {debugger; throw 'loop protection'; }
+    if (protection <= 0) {debugger; throw 'loop protection (literal)'; }
     assert('`');
     var ci = peek('i');
     if (ci) ++pos;
@@ -759,7 +767,6 @@ function parse(query, hardcoded, macros) {
     // then reset pos and parse atom again
     var s = '//injectMacro `'+query.slice(from, to)+'` -> `'+macro+'`\n';
     query = query.slice(0, from) + macro + query.slice(to);
-
     WARN('Extrapolated query:', query);
     pos = from;
     if (peek('[') || peek('{') || peek('(')) return s + parseAtomMaybe(insideToken, matchStateNumber, isTopLevelStart, invert);
@@ -857,7 +864,7 @@ function parse(query, hardcoded, macros) {
           // restore index if this group did not match ("backtracking")
         '  if (!group'+matchStateNumber+') index = startIndex'+innerCounter+';\n' +
         '} while(group'+matchStateNumber+' && --loopProtection'+currentCounter+' > 0 && (++count'+currentCounter+' < max'+currentCounter+'));\n' +
-        'if (loopProtection'+currentCounter+' <= 0) throw "Loop protection!";\n' +
+        'if (loopProtection'+currentCounter+' <= 0) throw "Loop protection (quantifier)";\n' +
         // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
         'group'+matchStateNumber+' = count'+currentCounter+' >= min'+currentCounter+';\n' +
         'if (!group'+matchStateNumber+') index = startIndex'+currentCounter+';\n' +

@@ -167,6 +167,11 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     if (type) return tokens[index].type === type;
     return tokens[index].type;
   }
+  // this should be something generic... stream may have multiple
+  // EOF tokens, or none, or "empty" tokens like ASI or ERROR
+  function isEof() {
+    return index >= tokens.length-1;
+  }
   function isNewline(delta) {
     var v = value(delta);
     return v === '\x0A' || v === '\x0D' || v === '\x0A\x0D' || v === '\u2028' || v === '\u2029';
