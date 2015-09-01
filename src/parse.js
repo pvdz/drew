@@ -672,17 +672,15 @@ function parse(query, hardcoded, macros) {
 
   function parseSymbol(insideToken, matchStateNumber, invert) {
     var start = pos;
-    var s = consume(); // TOFIX: should this be `consume`? will skip next whitespace, confirm.
+    var s = query[pos++]; // dont use consume(); it skips whitespace
 
     while (true) {
       var peeked = peek();
       if ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_') {
-        s += consume();
+        s += query[pos++]; // dont use consume(); it skips whitespace
       }
       else break;
     }
-
-    //if (!insideToken) reject('expecting symbols to be only inside tokens...');
 
     var t = '';
     if (insideToken) t += ' && !void ';
