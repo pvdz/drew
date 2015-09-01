@@ -168,7 +168,9 @@ function parse(query, hardcoded, macros) {
       result += parseQuantifiers(beforeQuantifier, afterQuantifier, matchStateNumber, currentCounter);
       result += (insideToken?'':'}\n');
     } else if (peek('(')) {
+      // the paren is consumed in parseGroup...
       if (insideToken) {
+        // from macro, or nested group
         result += '// - its a _nested_ group\n';
         beforeQuantifier += ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroup(INSIDE_TOKEN, matchStateNumber, NOT_TOPLEVEL_START) + ')';
 
@@ -176,6 +178,7 @@ function parse(query, hardcoded, macros) {
         result += parseQuantifiers(beforeQuantifier, afterQuantifier, matchStateNumber, currentCounter, insideToken);
         result += (insideToken ? '' : '}\n');
       } else {
+        // top level, or nested group
         result += '// - its a outer group\n';
 
         beforeQuantifier += '{ // parseAtomMaybe ' + currentCounter + ' for a token group `(`\n';
@@ -373,7 +376,7 @@ function parse(query, hardcoded, macros) {
     } else if (optional) {
       return false;
     } else {
-      throw 'unable to parse line stuff, and it is not optional';
+      reject('unable to parse line stuff, and it is not optional');
     }
 
     return result;
@@ -418,6 +421,7 @@ function parse(query, hardcoded, macros) {
         s += parseAtomMaybe(insideToken, matchStateNumber, toplevelStartStatus);
         toplevelStartStatus = NOT_TOPLEVEL_START;
       } else if (peek('(')) {
+        // nested group but paren is not consumed here...
         s += parseAtomMaybe(insideToken, matchStateNumber, toplevelStartStatus);
         toplevelStartStatus = NOT_TOPLEVEL_START;
       } else if (peek('|')) {
@@ -461,8 +465,11 @@ function parse(query, hardcoded, macros) {
           s += linestuff;
           toplevelStartStatus = NOT_TOPLEVEL_START;
         } else {
-          // group
-          // TOFIX: something's weird here. I think group should be parsed elsewhere
+          // expecting a macro at this point...
+          // can trigger inside and outside tokens due to macro extrapolation
+          var peeked = peek();
+          if (!((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked === '$' || peeked === '_'))) reject('not a macro? then what?');
+
           s += parseMatchConditions(insideToken, matchStateNumber, toplevelStart, NOT_INVERSE);
           toplevelStartStatus = NOT_TOPLEVEL_START; // ?
         }
@@ -493,7 +500,7 @@ function parse(query, hardcoded, macros) {
       // group outer is caught by parseGroup
       // group inner is caught by parseGroup
       // so this could only be token inner
-      if (!insideToken) throw 'Expect outer | to be causght by parseQuery or parseGroup, outer & is illegal regardless';
+      if (!insideToken) reject('Expect outer | to be caught by parseQuery or parseGroup, outer & is illegal regardless');
 
       var d = consume();
       s = ' && (true' + s + ' ' + d + d + ' (true' + parseMatchParticle(insideToken, matchStateNumber, NOT_TOPLEVEL_START, NOT_INVERSE) + '))';
@@ -503,6 +510,8 @@ function parse(query, hardcoded, macros) {
   }
 
   function parseMatchParticle(insideToken, matchStateNumber, toplevelStart, invert) {
+    // from parseGroup, parseToken (black/white), or parseMacro which could be anything
+
     if (peek('!')) {
       assert('!');
       invert = !invert;
@@ -518,9 +527,11 @@ function parse(query, hardcoded, macros) {
         return parseStarCondition(invert);
 
       case '(':
+        // parse group inside token (consumes in parseGroup eventually)
+        // - nested groups is done in parseAtom from parseGroup
+        // - outer group is done in parseAtom, never here
         if (!insideToken) reject('fixme')
-        // TOFIX: create a test under which the second parameter is relevant as it seems to be ignored right now
-        return parseAtomMaybe(insideToken, undefined, toplevelStart, invert);
+        return parseAtomMaybe(INSIDE_TOKEN, MATCH_STATE_NUMBER_IRRELEVANT, toplevelStart, invert);
 
       case '/':
         if (insideToken) return parseRegex();
@@ -617,7 +628,7 @@ function parse(query, hardcoded, macros) {
           s += peeked;
       }
     }
-    if (protection <= 0) {debugger; throw 'loop protection (literal)'; }
+    if (protection <= 0) {debugger; reject('loop protection (literal)'); }
     assert('`');
     var ci = peek('i');
     if (ci) ++pos;
@@ -824,9 +835,7 @@ function parse(query, hardcoded, macros) {
       }
     }
 
-    if (insideToken) {
-      throw 'Parse error: found quantifier for non-token or non-token-group. You can only quantify tokens.';
-    }
+    if (insideToken) reject('Parse error: found quantifier for non-token or non-token-group. You can only quantify tokens.');
 
     var callbackMode = NORMAL_CALL;
 
