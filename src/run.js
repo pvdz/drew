@@ -125,6 +125,10 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
   var REPEAT_CALL = 1;
   var COLLECT_CALL = 2;
 
+  var NEW_STATE = 0; // distinction from default state so we know to ignore certain seeking ops
+  var PASS_STATE = 1; // the query has actually failed to match a part
+  var FAIL_STATE = 2; // the query has actually passed the last check
+
   var EARLY_CALL = -1;
 
   var index = 0;
@@ -237,7 +241,7 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     LOG('argStack:', argStack.slice(0));
     LOG('tokensMatched:', tokensMatched.slice(0));
     GRCLOSE();
-    return matches;
+    return matches ? PASS_STATE : FAIL_STATE;
   }
 
   function symb() {
@@ -263,7 +267,7 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     LOG('argStack:', argStack.slice(0));
     LOG('tokensMatched:', tokensMatched.slice(0));
     GRCLOSE();
-    return matches;
+    return matches ? PASS_STATE : FAIL_STATE;
   }
 
   function symgt() {
@@ -282,8 +286,8 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     if (argStack.length < argPointer) WARN('assertion fail: arg stack is smaller than at start of group');
     var callPointer = callPointers.pop();
     if (callPointers.length < callPointer) WARN('assertion fail: call stack is smaller than at start of group');
-    LOG('## checkTokenGroup: matches='+!!matches)
-    if (matches) {
+    LOG('## checkTokenGroup: matches='+matches);
+    if (matches !== FAIL_STATE) {
       if (consumed) { // was any token consumed?
         queueArgs(s, startKey, stopKey, loopCount);
         queueRepeatCalls(repeatedCall, startKey, s, stopKey, index-1);
@@ -297,7 +301,6 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     LOG('argStack:', argStack.slice(0));
     LOG('tokensMatched:', tokensMatched.slice(0));
     GRCLOSE();
-    return matches;
   }
 
   function updateSymbStarts() {

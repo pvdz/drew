@@ -461,7 +461,7 @@ Drew offers a few ways to seek explicitly with and without being a match conditi
 
 Outside a token context you can use `~` to seek in a custom way. The symbol is defined as a macro in macros.js and allows you to seek an arbitrary (sub)query.
 
-The original intent was to have `~` be a way to seek towards the next newline or black token. To use in conjunction with the line start/stop matchers (`^` etc.). But since every language needs its own definitions of what to skip in such case there was no simple way to generalize on that. Plain text will want to skip spaces and tabs but JavaScript will also want to skip comments and ASI tokens.
+The original intent was to have `~` be a way to seek towards the next newline or black token unless at the start of input. To use in conjunction with the line start/stop matchers (`^` etc.). But since every language needs its own definitions of what to skip in such case there was no simple way to generalize on that. Plain text will want to skip spaces and tabs but JavaScript will also want to skip comments and ASI tokens.
 
 One special behavior of `~` is that it must be a NOOP to "match" as long as no other part of the query has matched. This is an optimization step. Drew will still try to match the query but if it seeked any tokens while no other part has matched anything yet, the `~` will fail and backtracking/bailing starts.
 

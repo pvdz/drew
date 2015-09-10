@@ -27,5 +27,8 @@ var constants = module.exports = {
 
   KEYWORD: 'token().isKeyword',
 
+  // for test cases
+  TRUE: 'true',
+  FALSE: 'false',
   DEBUG: '!function(){debugger;}'
 };

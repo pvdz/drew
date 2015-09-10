@@ -60,5 +60,8 @@ var macros = module.exports = {
   WITH: '`with`',
   STATEMENT_KEYWORD: 'BREAK | CASE | CONTINUE | DEBUGGER|  DEFAULT | DO | FOR | FUNCTION | IF | RETURN | SWITCH | TRY | THROW | VAR | WHILE | WITH',
 
+  // for test cases
   ADDITION: '{NUMBER}{PLUS}{NUMBER}',
+  MTRUE: 'TRUE',
+  MFALSE: 'FALSE',
 };

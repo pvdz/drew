@@ -128,8 +128,8 @@ var tests = module.exports = {
     [
       '[`a`]|~',
       '  a;  b;',
-      '@ a;  b;',
-      'the ~ at the "start" wont skip anything so it may as well be the empty query (which matches everything)'
+      '  @;  b;',
+      'the ~ at the "start" wont skip anything so it may as well be the empty query (which matches nothing, so a is the first that matches)'
     ],
     [
       '[WHITE & TAB][`;`]',
@@ -192,7 +192,7 @@ var tests = module.exports = {
       '(~[`a`]|[`b`])+=0,1',
       '  a;  b;',
       '  $;  $;',
-      '~ is ignored because query start, the match wont repeat but will match a and b (only) individually',
+      'this is (~a)|(b). the ~ should not match anything so is ignored. so only a or b matches because repeat',
       REPEAT_AFTER
     ],
     [
@@ -295,17 +295,17 @@ var tests = module.exports = {
     [
       '~^{`a`}',
       '  a;\nb;',
-      '@ a;\nb;',
-      '~ means consume any space/tab/comment. then check for ^. Match starts at ^, so at the start'
+      '  a;\nb;',
+      '~ at the start of query is ignored but the content it would skip will still be skipped, meaning that it must skip the whitespace before even trying the ^, and by then the query cant match'
     ],
     [
-      '~^^~[`a`]',
+      '~^^~[`a`]', // but why would you skip whitespace and then check for start of input? :/
       ' a;\nb;',
-      '@a;\nb;',
-      '~ is a noop if at start of query'
+      ' a;\nb;',
+      '~ at the start of query is ignored but the content it would skip will still be skipped, meaning that it must skip the whitespace before even trying the ^, and by then the query cant match'
     ],
     [
-      '~^^[`b`]',
+      '~^^[`b`]', // but why would you skip whitespace and then check for start of input? :/
       '  a;\nb;',
       '  a;\nb;',
       '~ means consume white tokens until current is black. then check for ^^'
@@ -569,13 +569,19 @@ var tests = module.exports = {
       '([SPACE][SPACE][SPACE][SPACE]|[TAB])=0,1',
       'var    b;',
       'var@  $b;',
-      'test range params for grouped conditionals of different length; long'
+      'test range params for grouped conditionals of different length; long.  (x y | z) is actually ((x y) z)'
+    ],
+    [
+      '([SPACE][SPACE][SPACE][SPACE]|[TAB])=0,1',
+      'var   \tb;',
+      'var   $b;',
+      'should not match three spaces and a tab. (x y | z) is actually ((x y) z), so the tab will match on its own'
     ],
     [
       '([SPACE][SPACE][SPACE][SPACE]|[TAB][TAB])=0,1',
       'var\t\tb;',
       'var@$b;',
-      'test range params for grouped conditionals of different length; short'
+      'test range params for grouped conditionals of different length; short. (x y | z) is actually ((x y) z)'
     ],
     [
       '([SPACE]|[TAB])=0|([COMMA]|[NUMBER])=1',
@@ -1052,7 +1058,7 @@ var tests = module.exports = {
       '({MIN|PLUS}{MIN|PLUS}{`y`}?)+@=,0',
       '+ - + - 1;',
       '+ @ + @ 1;',
-      'dont screw up stop'
+      'dont screw up stop (y should not match and stop index should not be the space that it was instead, but be before it)'
     ],
 
     [
@@ -1624,24 +1630,6 @@ var tests = module.exports = {
       }
     ],
 
-    // tbd
-    [
-      '({`{`|`;`}{CURLY_PAIR}=0,1) :eliminate empty blocks | ([NEWLINE]~[NEWLINE])=2,3 : eliminate empty lines, the tilde skips all non-newline whites, make sure 3 is not the last newline so one newline survives',
-      '// result after comment elimination example\nfunction query(){\n  \n  \n  \nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n\n\n{\nmatchedSomething = true;\n{ \n\ngroup0 = checkTokenBlack(symb() \n\n\n&& (matchedSomething = true) && checkConditionGroup(symgc()\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))\n, \'0\', \'1\');\n} \n}\n\n\n\n}\n\n  \n  return group0;\n}\n',
-      '',
-      'regression: index is not being reset so the newlines dont match',
-      REPEAT_EVERY,
-      INPUT_COPY
-    ],
-    [
-      '([NEWLINE](~[NEWLINE])+<)=2,3  |  ({`{`|`;`}~[NEWLINE]~[`{`]~[NEWLINE]<)=2,3',
-      '// result after comment elimination example\nfunction query(){\n  \n  \n  \nvar group0 = false;\nmatchedSomething = false;\n\n{\n\n\n\n{\nmatchedSomething = true;\n{ \n\ngroup0 = checkTokenBlack(symb() \n\n\n&& (matchedSomething = true) && checkConditionGroup(symgc()\n  && (true  && is(\'(\') && (true  && (token().rhp && skipTo(token().rhp.white)))))\n, \'0\', \'1\');\n} \n}\n\n\n\n}\n\n  \n  return group0;\n}\n',
-      '',
-      'regression: crash',
-      REPEAT_EVERY,
-      INPUT_COPY
-    ],
-
     [
       '(>(>))[`x`]',
       '  x',
@@ -1729,6 +1717,134 @@ var tests = module.exports = {
       'var foo = 15;',
       'arrow, should not find this and fail',
     ],
+    [
+      '([`var`](-->[`;`]=,1))',
+      'var foo = 15;',
+      '@ foo = 15$',
+      'tests a problem with detecting start of a query; the inner group should not reset state to NEW because the outer group already parsed the `var`',
+    ],
+    [
+      '[`;`]([`var`]|(-->[`;`]))=,1',
+      ';var foo = 15;',
+      '@$ foo = 15;',
+      'its still a greedy match so arrow is not even reached',
+    ],
+    [
+      '[`;`]([`nope`]|(-->[`;`]))=,1',
+      ';var foo = 15;',
+      '@var foo = 15$',
+      'tests a problem with detecting start of a query; the OR inside the group should not reset the state to NEW because the outer already parsed the semi',
+    ],
+    [
+      '[`var`]-->[`;`]*=,1',
+      'var foo = 15;',
+      '@ foo = 15;',
+      'empty match after arrow should be fine, though silly (an artifact will not set the end match so no dollar)',
+    ],
+    [
+      '[`var`]-->([`;`]|[`foo`])=,1',
+      'var foo = 15;',
+      '@ $ = 15;',
+      'should find foo before semi',
+    ],
+
+    [
+      '[`x`](TRUE | TRUE)',
+      'x',
+      '@',
+      'test toplevel or between constants',
+    ],
+    [
+      '[`x`](FALSE | TRUE)',
+      'x',
+      '@',
+      'test toplevel or between constants. the group(s) dont match anything and evaluate to a PASS so the whole thing should pass',
+    ],
+    //[
+    //  '[`x`](FALSE & TRUE)',
+    //  'x',
+    //  'x',
+    //  'test toplevel and between constants',
+    //],
+    [
+      '[`x`](FALSE | (FALSE | TRUE))',
+      'x',
+      '@',
+      'test grouped toplevel or between constants. the group(s) dont match anything and evaluate to a PASS so the whole thing should pass',
+    ],
+    //[
+    //  '[`x`](FALSE | (TRUE & TRUE))',
+    //  'x',
+    //  'x',
+    //  'test grouped toplevel and between constants',
+    //],
+    [
+      '[`x`](TRUE)[FALSE]',
+      'x',
+      'x',
+      'toplevel grouped constant',
+    ],
+    [
+      '[`x`](TRUE)(TRUE)[FALSE]',
+      'x',
+      'x',
+      'toplevel back to back grouped constants',
+    ],
+
+    [
+      '[`x`](MFALSE | MTRUE)',
+      'x',
+      '@',
+      'test toplevel or between macros. the group(s) dont match anything and evaluate to a PASS so the whole thing should pass',
+    ],
+    //[
+    //  '[`x`](MFALSE & MTRUE)',
+    //  'x',
+    //  'x',
+    //  'test toplevel and between macros',
+    //],
+    [
+      '[`x`](MFALSE | (MFALSE | MTRUE))',
+      'x',
+      '@',
+      'test grouped toplevel or between macros. the group(s) dont match anything and evaluate to a PASS so the whole thing should pass',
+    ],
+    //[
+    //  '[`x`](FALSE | (MTRUE & MTRUE))',
+    //  'x',
+    //  'x',
+    //  'test grouped toplevel and between macros',
+    //],
+    [
+      '[`x`](MTRUE)[MFALSE]',
+      'x',
+      'x',
+      'toplevel grouped macros',
+    ],
+    [
+      '[`x`](MTRUE)(MTRUE)[MFALSE]',
+      'x',
+      'x',
+      'toplevel back to back grouped macros',
+    ],
+    [
+      '(TRUE)(TRUE)(TRUE)(TRUE)',
+      'a',
+      '@',
+      'test a bunch of constants (empty match but the constant still evaluated to "PASS" at least once so it passes)',
+    ],
+    [
+      '(MTRUE)(MTRUE)(MTRUE)(MTRUE)',
+      'a',
+      '@',
+      'test a bunch of macros (empty match but the macro still evaluated to "PASS" at least once so it passes)',
+    ],
+    [
+      '([`x`]|~)[`y`]',
+      'x',
+      'x',
+      'for isFirstQueryCondition; this case proves state is impossible to determine at parse time',
+    ]
 
     // test that calls repeats (repeat or collect) but doesnt meet minimal quantity, trackback to another repeater...
     // test that repetitive callback is not called until min repetitions are seen
