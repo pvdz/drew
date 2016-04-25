@@ -2,16 +2,17 @@ module.exports = run;
 
 var VERBOSE = true;
 var VERBOSEMAX = 5000;
+var LOG_FUNC = null; // function(level:{'log','warn','error'}, ...args) to proxy console.log stuff. unused if empty.
 
 // note: these three cannot use numbers as values.
 var QUERY_NOT_MATCHED = undefined;
 
 function ds() { if (VERBOSE && ++VERBOSE > VERBOSEMAX) VERBOSE = false, console.log('DEAD MANS SWITCH ACTIVATED, FURTHER LOGGING SQUASHED'); return VERBOSE; }
-function LOG(){ if (ds()) console.log.apply(console, arguments); }
-function WARN(){ if (ds()) console.warn.apply(console, arguments); }
-function ERROR(){ if (ds()) console.error.apply(console, arguments); }
-function GROPEN(){ if (ds()) console.group.apply(console, arguments); }
-function GRCLOSE(){ if (ds()) console.groupEnd.apply(console, arguments); }
+function LOG(){ if (ds()) console.log.apply(console, arguments), (LOG_FUNC && LOG_FUNC.apply(undefined, [].concat.apply(['log'], arguments))); }
+function WARN(){ if (ds()) console.warn.apply(console, arguments), (LOG_FUNC && LOG_FUNC.apply(undefined, [].concat.apply(['warn'], arguments))); }
+function ERROR(){ if (ds()) console.error.apply(console, arguments), (LOG_FUNC && LOG_FUNC.apply(undefined, [].concat.apply(['error'], arguments))); }
+function GROPEN(){ if (ds()) console.group.apply(console, arguments), (LOG_FUNC && LOG_FUNC.apply(undefined, [].concat.apply(['gropen'], arguments))); }
+function GRCLOSE(){ if (ds()) console.groupEnd.apply(console, arguments), (LOG_FUNC && LOG_FUNC.apply(undefined, [].concat.apply(['grclose'], arguments))); }
 
 function run(tokens, queryCode, handler, repeatMode, copyInputMode, startTokenIndex, stopTokenIndex){
   LOG('run(<tokens>, <queryCode>, <handler>, '+[repeatMode, copyInputMode, startTokenIndex, stopTokenIndex].join()+')');
