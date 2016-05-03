@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>no.</title>
+</head>
+<body>
+  <script src="../src/parsev2.js"></script>
+  <script>
+    var everything = {
+      start: [
+        ['group', 'quant', 'desig'],
+        ['atom', 'quant', 'desig'],
+      ],
+      group: [
+        ['(', 'atom', ')'],
+        ['(', 'atom', '&&', 'atom', ')'],
+        ['(', 'atom', '||', 'atom', ')'],
+        ['(', 'atom', '&&', 'atom', '||', 'atom', ')'],
+        ['(', 'atom', '||', 'atom', '&&', 'atom', ')'],
+        ['(', '(', 'atom', '||', 'atom', ')', '||', 'atom', ')'],
+        ['(', 'atom', '||', '(', 'atom', '||', 'atom', ')', ')'],
+      ],
+      atom: [
+        ['[', 'cond', ']'],
+        ['{', 'cond', '}'],
+        ['<'],
+        ['<<'],
+        ['>'],
+        ['>>'],
+        ['~'],
+        ['-->'],
+      ],
+      cond: [
+        ['macro'],
+        ['*'],
+        ['`x`'],
+        ['`x1`'],
+        ['`x`i'],
+        ['/x/'],
+        ['/x/i'],
+        ['/x/m'],
+        ['/x/im'],
+        ['/x/mi'],
+      ],
+      match: [
+        ['cond'],
+        ['cond', '||', 'cond'],
+        ['cond', '&&', 'cond'],
+        ['(', 'cond', '&&', 'cond', ')', '||', 'cond'],
+        ['(', 'cond', '||', 'cond', ')', '&&', 'cond'],
+      ],
+      quant: [
+        [''],
+        ['*'],
+        ['?'],
+        ['+'],
+        ['1'],
+        ['348'],
+        ['3', '...'],
+        ['755', '...'],
+        ['...', '1'],
+        ['...', '407'],
+        ['8', '..', '9'],
+        ['487', '..', '2218'],
+      ],
+      desig: [
+        [''],
+        ['=', '0'],
+        ['=', 'aaa'],
+        ['=', '045fch'],
+        ['=', 'Agfgd'],
+        ['=', '$gfgd'],
+        ['=', 'g$fgd'],
+        ['=', '_gfgd'],
+        ['=', 'g_fgd'],
+        ['=', ',', '15'],
+        ['=', ',', 'dfcx'],
+        ['=', 'fcxa', ',', 'gfcxv'],
+        ['=', '54', ',', 'grdaAb'],
+        ['=', 'evDDxa', ',', '7448'],
+        ['=', '477', ',', '8733'],
+      ],
+    };
+
+    let whites = [
+      '',
+      ' ',
+      ':', // dont put adjacent to other colon or it may end up as ::
+      '\t',
+      '\n',
+      '\r',
+      ': simple comment HERE',
+      ': simple comment terminated HERE;',
+      ':: line : comment :: HERE ::: !\n',
+      '::: multi : line :: comment HERE :::',
+    ];
+
+    var prot = 10000;
+    var list = [];
+    function find(arr) {
+      for (var i=0; i<arr.length; ++i) {
+        if (everything[arr[i]]) {
+          return i;
+        }
+      }
+      return -1;
+    }
+    function extrapolate(arr, _d) {
+      if (--prot < 0) throw 'stop.';
+      var index = find(arr);
+      if (index >= 0) {
+        _extrapolate(arr, index, _d);
+      } else {
+        finalize(arr);
+      }
+    }
+
+    function _extrapolate(arr, index, _d) {
+      var key = arr[index];
+      var reps = everything[key];
+      for (var j=0; j<reps.length; ++j) {
+        var copy = arr.slice(0);
+        var args = [index, 1].concat(reps[j]);
+        copy.splice.apply(copy, args);
+        extrapolate(copy, _d+1);
+      }
+    }
+
+    function zipFrom(arr1, arr2, into, from1, from2, len, offset) {
+      for (var i = 0; i<len; ++i) {
+        var w = arr2[(offset + from2 + i) % arr2.length];
+        var b = arr1[from1 + i];
+
+        var prev = into.length && into[into.length - 1] || '';
+        if (prev[0] === ':' && prev === ':' || prev[1] !== ':') {
+          if (/^\s*[a-zA-z]/.test(b)) {
+            // skip this because it may lead to something like `['[', ':', 'foo', ']']` which is `[:foo]` which is invalid
+            return false;
+          }
+        }
+
+        into.push(b, w);
+      }
+    }
+
+    function finalize(arr) {
+      list.push(arr.join(''));
+      for (var i=0; i<whites.length; ++i) {
+        whiten(arr, i);
+      }
+    }
+
+    function whiten(arr, whiteOffset) {
+      var len1 = arr.length;
+      var len2 = whites.length;
+
+      var first = Math.min(len1, len2);
+      var middle = len1 - 2 * len2;
+      var last = middle > 0 ? len2 - (first + middle) : 0;
+
+      var out = [];
+      if (zipFrom(arr, whites, out, 0, 0, first, whiteOffset) === false) return;
+      if (middle > 0) {
+        for (var i=0; i<middle; ++i) out.push(arr[first + i]);
+        if (last) if (zipFrom(arr, whites, out, first + middle, 0, last, whiteOffset) === false) return;
+      }
+
+      console.log(arr);
+      console.log(out);
+      console.log("[%o]", out.join(''));
+      drew(out.join(''));
+    }
+
+    extrapolate(everything.start[1], 0);
+
+//    console.log(list.join('\n'));
+//    console.log(10000-prot)
+
+  </script>
+</body>
+</html>

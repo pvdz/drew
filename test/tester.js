@@ -8,8 +8,8 @@ var macros = require('./../src/macros');
 var tests = require('./tests');
 
 var targetTestIndex = '';
-//var targetTestIndex = 'plain text 1';
-//var targetTestIndex = 'js 1';
+//var targetTestIndex = 'plain text 9';
+var targetTestIndex = 'js 193';
 if (targetTestIndex) VERBOSE = true, console.warn('only running test', targetTestIndex);
 else VERBOSE = false;
 
@@ -30,18 +30,6 @@ for (var i=0; i<tests.js.length; ++i) {
   one(tests.js[i], 'js '+i, jsInputParser);
 }
 
-function defaultTestCallback(token0, token1){
-  // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
-  // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
-
-  var args = Array.prototype.slice.call(arguments, 0);
-//      console.log('callback('+args.map(function(t){return t.white;})+')');
-//      console.log('callback('+args+')');
-  if (token0) token0.value = '@';
-  if (token1) token1.value = '$';
-  for (var i=2; i<args.length; ++i) args[i].value = '#';
-}
-
 function one(testCase, testIndex, inputParser) {
   if (targetTestIndex && targetTestIndex !== testIndex) return;
 
@@ -51,7 +39,44 @@ function one(testCase, testIndex, inputParser) {
   var desc = testCase[3];
   var repeatMode = testCase[4] || 'once';
   var inputMode = testCase[5] || 'nocopy';
-  var handler = testCase[6] || defaultTestCallback;
+  var handler = testCase[6] || function defaultTestCallback(token0, token1){
+    // note: callback is either mapped to args by index, or given as an object if at least one key is non-positive-int
+    // this tester callback replaces the token in first arg with '@', second with '$', other args with '#'
+
+    var args = Array.prototype.slice.call(arguments, 0);
+
+    if (callbackMode === 1) {
+      // used % with one arg so it should contain an array of start-stop pairs for all individual match
+      if (!(token0 instanceof Array)) return console.error(testIndex+': callbackMode=1 but first arg is not an array');
+      for (var i=0; i<token0.length; i+=2) {
+        token0[i].value = '@';
+        token0[i+1].value = '$';
+      }
+    } else if (callbackMode === 2) {
+      // used % with two args so each should contain a list of starts and the other stops for all individual match
+      if (!(token0 instanceof Array)) return console.error(testIndex+': callbackMode=1 but first arg is not an array');
+      if (!(token1 instanceof Array)) return console.error(testIndex+': callbackMode=2 but second arg is not an array');
+      for (var i=0; i<token0.length; ++i) {
+        token0[i].value = '@';
+        token1[i].value = '$';
+      }
+    } else {
+//      console.log('callback('+args.map(function(t){return t.white;})+')');
+//      console.log('callback('+args+')');
+      if (token0) token0.value = '@';
+      if (token1) token1.value = '$';
+      for (var i=2; i<args.length; ++i) args[i].value = '#';
+    }
+  };
+
+  var callbackMode = 0;
+  if (repeatMode === 'all one') {
+    repeatMode = 'once';
+    callbackMode = 1;
+  } else if (repeatMode === 'all two') {
+    repeatMode = 'once';
+    callbackMode = 2;
+  }
 
   var funcCode = undefined;
   var output = undefined;

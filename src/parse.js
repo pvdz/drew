@@ -1,3 +1,5 @@
+// parse a Drew query
+
 module.exports = parse;
 
 // TODO: drop `length` from args object as soon as we encounter one non-int key
@@ -6,6 +8,7 @@ var VERBOSE = true;
 function parse(query, hardcoded, macros) {
   var pos = 0;
   var inputQuery = query;
+  var len = query.length;
   var lastAtomStart = 0;
 
   var TOPLEVEL = true;
@@ -34,19 +37,115 @@ function parse(query, hardcoded, macros) {
   function GROPEN(){ if (VERBOSE) console.group.apply(console, arguments); }
   function GRCLOSE(){ if (VERBOSE) console.groupEnd.apply(console, arguments); }
 
-  function white(c) {
-    return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\r\n';
+  function ASSERT(b, msg) {
+    if (!b) {
+      console.log('error at \u25A0\u25A0\u25A0:');
+      console.log(query.slice(0, pos) + '\u25A0\u25A0\u25A0'+ query.slice(pos));
+      throw new Error('['+pos+'] '+msg);
+    }
   }
 
-  function consumeThenSkipWhites() {
+  function consumeWhiteTokenMaybe(c) {
+    // note: token in this context is from the query, not the input :)
+    // it's a single char for space, tab, newline. multi char for
+    // crlf and comments
+    switch (c) {
+      case ' ':
+      case '\t':
+      case '\n':
+        ++pos;
+        break;
+
+      case '\r':
+        if (query[++pos] === '\n') ++pos;
+        break;
+
+      case ':':
+        consumeComment();
+        break;
+
+      default:
+        return false;
+    }
+    return true;
+  }
+  function consumeComment() {
+    ASSERT(query[pos] === ':');
+    // simple comment, single line comment, multi line comment
+
+    if (query[++pos] === ':') {
+      // not a simple comment
+      if (query[++pos] === ':') {
+        consumeMultiLineComment();
+      } else {
+        consumeSingleLineComment();
+      }
+    } else {
+      consumeSimpleComment();
+    }
+  }
+  function consumeSimpleComment() {
+    // header (`:`) parsed
+    // letters, numbers, spaces, \t \n \r, dash, underscore, dollar
+    // stop at semi, do consume the semi
+    while (true) {
+      var c = query[++pos];
+      if (!(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9')) {
+        switch (c) {
+          case '-':
+          case '_':
+          case '$':
+          case ' ':
+          case '\t':
+          case '\n':
+          case '\r':
+            break;
+          case ';':
+            // explicit end of comment
+            ++pos;
+            return;
+          default:
+            // implicit end of comment
+            return;
+        }
+      }
+    }
+  }
+  function consumeSingleLineComment() {
+    // header (`::`) parsed
+    // keep parsing until EOL or EOF
+    while (++pos < len) {
+      var c = query[pos];
+      if (c === '\n') return;
+      if (c === '\r') return;
+    }
+  }
+  function consumeMultiLineComment() {
+    // header (`:::`) parsed
+    // keep parsing until the next `:::` or EOF
+    while (++pos < len) {
+      if (query[pos] === ':') {
+        ++pos;
+        if (query[pos] === ':') {
+          ++pos;
+          if (query[pos] === ':') {
+            return;
+          }
+        }
+        // TODO: I think we can do ++pos here because we already validated query[pos] not to be a colon
+      }
+    }
+  }
+
+  function consumeCharThenSkipWhites() {
     var c = query[pos++];
 
-    consumeWhitesOnly();
+    consumeWhites();
 
     return c;
   }
-  function consumeWhitesOnly() {
-    while (white(query[pos])) ++pos;
+  function consumeWhites(c) {
+    while (consumeWhiteTokenMaybe(c)) c = query[pos];
   }
   function peek(c) {
     var d = query[pos];
@@ -58,13 +157,12 @@ function parse(query, hardcoded, macros) {
     if (c) return c === d;
     return d;
   }
-  function assert(c) {
+  function assertAndConsume(c) {
     if (c !== query[pos]) reject('fail, expecting ['+c+'] at ['+pos+'] in ['+query+'], found ['+query[pos]+']');
-    consumeThenSkipWhites();
+    consumeCharThenSkipWhites();
   }
   function reject(m){
-    console.log(query.slice(0, pos) + '\ud68e\ud68e\ud68e'+ query.slice(pos));
-    throw new Error('['+pos+'] '+m);
+    ASSERT(false, m);
   }
 
   function parseQuery() {
@@ -78,7 +176,7 @@ function parse(query, hardcoded, macros) {
       s += parseTopLevelAtom(matchStateNumber, MANDATORY);
 
       if (peek('|')) {
-        consumeThenSkipWhites();
+        assertAndConsume('|');
         s +=
           '  GRCLOSE();\n' +
           '} // top level, OR\n' +
@@ -109,12 +207,10 @@ function parse(query, hardcoded, macros) {
 
   function parseTopLevelAtom(matchStateNumber) {
     var s = '// parseTopLevelAtom\n';
-    var atom;
-    var optional = MANDATORY; // first in a loop is always required.
-    while (atom = parseOutsideAtom(matchStateNumber, optional)) {
+    var atom = parseOutsideAtom(matchStateNumber, MANDATORY);
+    do {
       s += atom + '\n';
-      optional = OPTIONAL; // only first one in a loop can be mandatory in this context
-    }
+    } while (atom = parseOutsideAtom(matchStateNumber, OPTIONAL));
 
     return s;
   }
@@ -131,76 +227,26 @@ function parse(query, hardcoded, macros) {
     var beforeQuantifier = '';
     var afterQuantifier = '';
 
-    consumeWhitesOnly();
+    consumeWhites();
 
-    switch (peek()) {
-      case LAMBDA:
-        // ignore. code will already have been compiled. this is just an artifact to simplify other parts of the code.
+    var c = peek();
+    switch (c) {
+      case '[':
+      case '{':
+      case '(':
+        result += parseNormalAtom(c);
+        return;
+
+      case LAMBDA: {
+        // this is injected by our code to replace a macro
+        // ignore it. code will already have been compiled.
+        // this is just an artifact to simplify other parts of the code.
         ++pos;
         break;
-      case '[': {
-        result += '// - its a white token\n';
-
-        beforeQuantifier += '// parseAtomMaybe ' + atomStateNumber + ' for a white token `[`\n';
-        beforeQuantifier += '// white token ' + atomStateNumber + ':' + (++tokenCounter) + '\n';
-        beforeQuantifier += 'queryPassState_' + atomStateNumber + ' = checkTokenWhite(symw()' + parseWhiteToken();
-
-        afterQuantifier += ');\n';
-        afterQuantifier += '// `]` ' + atomStateNumber + ' for a white token\n';
-
-        result += parseQuantifiers(beforeQuantifier, afterQuantifier, atomStateNumber);
-        break;
       }
-      case '{': {
-        result += '// - its a black token\n';
 
-        beforeQuantifier += '// parseAtomMaybe ' + atomStateNumber + ' for black token `{`\n';
-        beforeQuantifier += '// black token ' + atomStateNumber + ':' + (++tokenCounter) + '\n';
-        beforeQuantifier += 'queryPassState_' + atomStateNumber + ' = checkTokenBlack(symb()' + parseBlackToken();
-
-        afterQuantifier += ');\n';
-        afterQuantifier += '// `}` ' + atomStateNumber + ' for black token\n';
-
-        result += parseQuantifiers(beforeQuantifier, afterQuantifier, atomStateNumber);
-        break;
-      }
-      case '(': {
-        // the paren is consumed in parseGroup...
-        // top level, or nested group
-        result += '// - its a outer group\n';
-
-        beforeQuantifier += '// parseAtomMaybe ' + atomStateNumber + ' for a token group `(`\n';
-        beforeQuantifier += '// start of a group (' + atomStateNumber + ')\n';
-        // TOFIX: does it matter if outer state is NEW vs PASS?
-        //beforeQuantifier += 'var queryPassState_' + atomStateNumber + ' = NEW_STATE; // 4\n'; // inside a group, init to true
-        beforeQuantifier += 'var groupStart' + atomStateNumber + ' = index;\n';
-        beforeQuantifier += 'symgt(); // ' + atomStateNumber + '\n';
-        beforeQuantifier += parseGroupOutside(atomStateNumber);
-        beforeQuantifier += 'checkTokenGroup(';
-        beforeQuantifier += 'queryPassState_' + atomStateNumber;
-        beforeQuantifier += ', index - groupStart' + atomStateNumber;
-
-        afterQuantifier += ');\n';
-        afterQuantifier += 'if (queryPassState_' + atomStateNumber + ' === FAIL_STATE) index = groupStart' + atomStateNumber + ';\n';
-        // TOFIX: what if the group state was new but the outer state was pass? should not clobber here...
-        afterQuantifier += 'queryPassState_' + matchStateNumber + ' = queryPassState_' + atomStateNumber + '\n';
-        afterQuantifier += '// end group ' + atomStateNumber + '\n';
-        afterQuantifier += '// `)` ' + atomStateNumber + ' for token group\n';
-
-        result += parseQuantifiers(beforeQuantifier, afterQuantifier, atomStateNumber);
-        break;
-      }
-      case '#': {
-        result += '// an explicit callback (#)\n';
-        assert('#');
-        var id = parseDesignator();
-        if (!id) id = 0;
-        parseColonComment();
-        result += 'queueEarlyCall("' + id + '");\n';
-        break;
-      }
       case '~': {
-        assert('~');
+        assertAndConsume('~');
 
         var varCounter = ++counter;
         // we are going to match ~ regardless. but it will only pass if either it's not
@@ -227,6 +273,7 @@ function parse(query, hardcoded, macros) {
           '';
         break;
       }
+
       case '<':
       case '>': {
         var symbol = peek();
@@ -234,10 +281,10 @@ function parse(query, hardcoded, macros) {
         // dont skip whitespace. this would allow you to explicitly skip white tokens without a number suffix
         var forBlack = peek() === symbol;
         if (forBlack) ++pos;
-        consumeWhitesOnly();
+        consumeWhites();
         var peeked = peek();
         var steps = 1;
-        if (peeked >= '0' && peeked <= '9') steps = parseNumbersAsInt();
+        if (peeked >= '0' && peeked <= '9') steps = consumeNumbersAsInt();
         if (!steps) reject('Cannot use `' + steps + '`; it is an illegal number for moving the pointer forward');
         result +=
           '{\n' +
@@ -282,18 +329,19 @@ function parse(query, hardcoded, macros) {
           '';
         break;
       }
+
       case '^': {
         // start of line, or start of file if another ^ follows
         result += '{\n';
         result += 'GROPEN("^ or ^^");\n';
         if (over('^')) { // no space between
-          assert('^');
-          assert('^');
+          assertAndConsume('^');
+          assertAndConsume('^');
           result += 'LOG("^^ start of file?", !index);';
           result += 'queryPassState_' + atomStateNumber + ' = !index ? PASS_STATE : FAIL_STATE;';
           result += ' // ^^\n';
         } else {
-          assert('^');
+          assertAndConsume('^');
           result += 'LOG("^ start of line?", !index, index && isNewline(-1), "->", !index || isNewline(-1));\n';
           result += 'queryPassState_' + atomStateNumber + ' = (!index || isNewline(-1)) ? PASS_STATE : FAIL_STATE;';
           result += ' // ^\n';
@@ -307,14 +355,14 @@ function parse(query, hardcoded, macros) {
         result += '{\n';
         result += 'GROPEN("$ or $$");\n';
         if (over('$')) { // no space between
-          assert('$');
-          assert('$');
+          assertAndConsume('$');
+          assertAndConsume('$');
           result += 'LOG(tokens[index]);\n';
           result += 'LOG("$$ end of file?", isEof());\n';
           result += 'queryPassState_' + atomStateNumber + ' = isEof() ? PASS_STATE : FAIL_STATE;';
           result += ' // $$\n'
         } else {
-          assert('$');
+          assertAndConsume('$');
           result += 'LOG("$ end of line?", "eol=", isEof() || isNewline(0), "eof=", isEof());\n';
           result += 'queryPassState_' + atomStateNumber + ' = (isEof() || isNewline(0)) ? PASS_STATE : FAIL_STATE; // $\n';
         }
@@ -322,36 +370,35 @@ function parse(query, hardcoded, macros) {
         result += '}\n';
         break;
       }
-      case '-': {
-        if (query[pos + 1] === '-' && query[pos + 2] === '>') {
-          pos += 3;
 
-          // so basically we try to match the next token and bump the index while we dont
-          var loopId = ++counter;
-          result +=
-            '{\n' +
-            ' GROPEN("-->");\n' +
-            '  var protect' + loopId + ' = 10000;\n' +
-              // TOFIX: this uncovers a problem with state; something should be transferred from parent to child because right now children start as NEW. while true for a group, false for the query as a whole, and that's the relevant part here.
-              // note: use matchStateNumber here! we want to know whether we parsed anything at all
-            '  if (queryPassState_' + matchStateNumber + ' === NEW_STATE) {\n' +
-            '    WARN("Arrow (-->) not allowed at the start of a query");\n' +
-            '    queryPassState_' + atomStateNumber + ' = FAIL_STATE;\n' +
-            '  } else {\n' +
-            '    do {\n' +
-            '      LOG("--> parsing until we find next atom, from:", index, tokens[index]);\n' +
-            '      queryPassState_' + atomStateNumber + ' = PASS_STATE; // note that state cannot be NEW here because then --> would have failed. will be overwritten but otherwise code will not even check\n' +
-            parseOutsideAtom(atomStateNumber, MANDATORY) + // restrict to tokens and groups...
-            '      // increase index by one as long as we dont match\n' +
-            '    } while (queryPassState_' + atomStateNumber + ' === FAIL_STATE && ++index && !isEof() && --protect' + loopId + ' > 0);\n' +
-            '    if (protect' + loopId + ' <= 0) debugger;// throw "loop protection (seek)";\n' +
-            '    if (queryPassState_' + atomStateNumber + ' !== FAIL_STATE) LOG("Next atom found");\n' +
-            '    else LOG("unable to find match, --> failed");\n' +
-            '  }\n' +
-            '  GRCLOSE();\n' +
-            '}\n' +
-            '';
-        }
+      case '-': if (over('-') && query[pos + 2] === '>') {
+        pos += 3;
+
+        // so basically we try to match the next token and bump the index while we dont
+        var loopId = ++counter;
+        result +=
+          '{\n' +
+          ' GROPEN("-->");\n' +
+          '  var protect' + loopId + ' = 10000;\n' +
+            // TOFIX: this uncovers a problem with state; something should be transferred from parent to child because right now children start as NEW. while true for a group, false for the query as a whole, and that's the relevant part here.
+            // note: use matchStateNumber here! we want to know whether we parsed anything at all
+          '  if (queryPassState_' + matchStateNumber + ' === NEW_STATE) {\n' +
+          '    WARN("Arrow (-->) not allowed at the start of a query");\n' +
+          '    queryPassState_' + atomStateNumber + ' = FAIL_STATE;\n' +
+          '  } else {\n' +
+          '    do {\n' +
+          '      LOG("--> parsing until we find next atom, from:", index, tokens[index]);\n' +
+          '      queryPassState_' + atomStateNumber + ' = PASS_STATE; // note that state cannot be NEW here because then --> would have failed. will be overwritten but otherwise code will not even check\n' +
+          parseOutsideAtom(atomStateNumber, MANDATORY) + // restrict to tokens and groups...
+          '      // increase index by one as long as we dont match\n' +
+          '    } while (queryPassState_' + atomStateNumber + ' === FAIL_STATE && ++index && !isEof() && --protect' + loopId + ' > 0);\n' +
+          '    if (protect' + loopId + ' <= 0) debugger;// throw "loop protection (seek)";\n' +
+          '    if (queryPassState_' + atomStateNumber + ' !== FAIL_STATE) LOG("Next atom found");\n' +
+          '    else LOG("unable to find match, --> failed");\n' +
+          '  }\n' +
+          '  GRCLOSE();\n' +
+          '}\n' +
+          '';
         break;
       }
     }
@@ -373,17 +420,127 @@ function parse(query, hardcoded, macros) {
 
     return result;
   }
-  function parseWhiteToken() {
-    assert('[');
-    var s = parseInsideAtoms(NOT_INVERSE);
-    assert(']');
-    return s;
-  }
-  function parseBlackToken() {
-    assert('{');
-    var s = parseInsideAtoms(NOT_INVERSE);
-    assert('}');
-    return s;
+  function parseNormalAtom(atomStartChar) {
+    var atomStateNumber = ++counter;
+    var arg = '';
+    var condition = '';
+    switch (atomStartChar) {
+      case '[': {
+        assertAndConsume('[');
+        condition = parseInsideAtoms(NOT_INVERSE);
+        assertAndConsume(']');
+        arg = 'white';
+        break;
+      }
+      case '{': {
+        assertAndConsume('{');
+        condition = parseInsideAtoms(NOT_INVERSE);
+        assertAndConsume('}');
+        arg = 'white';
+        break;
+      }
+      case '(': {
+        condition = parseGroupOutside(atomStateNumber);
+        arg = 'group';
+        break;
+      }
+      default:
+        ASSERT(false, 'should only call this func for `{[(`');
+    }
+
+    var minmax = parseQuantifiers(); // '' or 'var min50 = 0; var max50 = 10 || tokens.length - pos;'
+    var min = 1;
+    var max = 1;
+    if (minmax) {
+      min = minmax & 0xffff;
+      max = minmax >>> 16;
+      if (max && min > max) parseError('QUANTIFIER_MAX_SMALLER_MIN');
+      // not `?` or somehow 0,0 or 0,1 because we can do that easier
+      if (min > 1 || max !== 1) {
+        result = 'var start = pos;';
+        result += 'var min = ' + min + ';';
+        result += 'var max = ' + max + ';';
+        result += 'while (xxx && max && has < max) ++has;';
+        result += 'if (xxx && has >= min && has <= max) {';
+        result += '  args["' + parseIdentifier() + '"] = start;';
+        result += '  args["' + parseIdentifier() + '"] = pos;';
+        result += '}';
+        return result;
+      }
+    }
+
+    // simple match, zero or one exactly
+    var result = 'if (xxxx) {';
+    if (peek('=')) {
+      if (peek(',')) {
+        result += 'args["' + parseIdentifier() + '"] = pos;';
+      } else {
+        result += 'args["' + parseIdentifier() + '"] = start;';
+        if (peek(',')) {
+          result += 'args["' + parseIdentifier() + '"] = pos;';
+        }
+      }
+    }
+    if (min) {
+      result += '} else {'
+      result += '  return false;';
+    }
+    result += '}';
+    return result;
+
+
+    //var start = pos;
+    //var min = 5;
+    //var max = 10;
+    //var has = 0;
+    //while (has < max && matched) ++has;
+    //var matched = has >= min && has <= max;
+    //while ((matched = parseToken('white') && condition) && max && has < max) ++has;
+    //if (matched && has < max) {
+    //  args[x] = start;
+    //  args[y] = pos;
+    //}
+
+    return result;
+    //
+    //
+    //result += '// - its a white token\n';
+    //result += '// parseAtomMaybe ' + atomStateNumber + ' for a white token `[`\n';
+    //result += '// white token ' + atomStateNumber + ':' + (++tokenCounter) + '\n';
+    //result += 'queryPassState_' + atomStateNumber + ' = checkTokenWhite(symw()' + ;
+    //
+    //var innerCounter = ++counter;
+    //
+    //var result =
+    //  //'{\n' +
+    //  '// parseQuantifiers '+matchStateNumber+', loop id = '+uniqueLoopNum+'\n' +
+    //  '// quantifier for this part of the query: `'+(query.slice(startpos, pos))+'`\n'+
+    //  'var loopProtection'+uniqueLoopNum+' = 20000;\n' +
+    //  'var min'+uniqueLoopNum+' = '+min+';\n' +
+    //  'var max'+uniqueLoopNum+' = '+max+' || tokens.length;\n' +
+    //  'var count'+uniqueLoopNum+' = 0;\n' +
+    //  'var startIndex'+uniqueLoopNum+' = index; // backup for backtracking\n' +
+    //  'do {\n' +
+    //  beforeAssignments +
+    //  parseAssignments(FORCE_PARAMFILL) +
+    //  ', count'+uniqueLoopNum+'+1' +
+    //  ', ' + callbackMode +
+    //  ', min'+uniqueLoopNum +
+    //  afterAssignments +
+    //  '} while(queryPassState_'+matchStateNumber+' !== FAIL_STATE && --loopProtection'+uniqueLoopNum+' > 0 && (++count'+uniqueLoopNum+' < max'+uniqueLoopNum+'));\n' +
+    //  'if (loopProtection'+uniqueLoopNum+' <= 0) throw "Loop protection (quantifier)";\n' +
+    //  'LOG("finished quantifier;", count'+uniqueLoopNum+', ">=", min'+uniqueLoopNum+', "=", count'+uniqueLoopNum+' >= min'+uniqueLoopNum+');\n' +
+    //    // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
+    //  'queryPassState_'+matchStateNumber+' = count'+uniqueLoopNum+' >= min'+uniqueLoopNum+' ? PASS_STATE : FAIL_STATE;\n' +
+    //    // we reset the counter if the required number was not reached OR if it was optional and indeed not matched at all
+    //  'if (queryPassState_'+matchStateNumber+' === FAIL_STATE || !count'+uniqueLoopNum+') index = startIndex'+uniqueLoopNum+';\n' +
+    //    //'}\n' +
+    //  '';
+    //
+    //result += ');\n';
+    //result += '// `]` ' + atomStateNumber + ' for a white token\n';
+    //
+    //result += parseQuantifiers(beforeQuantifier, afterQuantifier, atomStateNumber);
   }
 
   function parseAtomInside(matchStateNumber, invert, optional, tokenOrGroupOnly) {
@@ -402,16 +559,6 @@ function parse(query, hardcoded, macros) {
         '// - its a _nested_ group\n'+
         ' && ' + (invert ? '!' : '') + 'checkConditionGroup(symgc()' + parseGroupInside() + ')' +
         '';
-    } else if (peek('#')) {
-      result += '// an explicit callback (#)\n';
-      assert('#');
-
-      var id = parseDesignator();
-      if (!id) id = 0;
-
-      parseColonComment();
-
-      result += 'queueEarlyCall("' + id + '");\n';
     } else {
       throw 'nope';
     }
@@ -430,15 +577,15 @@ function parse(query, hardcoded, macros) {
       // special case: just consume a character and return
       // this happens when parsing a symbol that turns out to be a constant
       // parseGroup is immediately called afterwards so we can return now
-      assert(LAMBDA);
+      assertAndConsume(LAMBDA);
       return '// ('+LAMBDA+')\n';
     }
 
     var s = '';
-    assert('(');
+    assertAndConsume('(');
     // we know it is NOT a ( so we dont have the possibility of a group here, so:
     if (!peek(')')) s += parseInsideAtoms(NOT_INVERSE);
-    assert(')');
+    assertAndConsume(')');
 
     return s;
   }
@@ -447,10 +594,10 @@ function parse(query, hardcoded, macros) {
       // special case: just consume a character and return
       // this happens when parsing a symbol that turns out to be a constant
       // parseGroup is immediately called afterwards so we can return now
-      assert(LAMBDA);
+      assertAndConsume(LAMBDA);
       return '// ('+LAMBDA+')\n';
     }
-    assert('(');
+    assertAndConsume('(');
     var groupUniqueIndex = ++counter;
     var s =
       '// parseGroup\n' +
@@ -470,7 +617,7 @@ function parse(query, hardcoded, macros) {
           return reject('Unexpected EOF');
 
         case '|':
-          assert('|');
+          assertAndConsume('|');
           s +=
             '  LOG("group sub-end for OR");\n' +
             '  GRCLOSE();\n' +
@@ -492,7 +639,7 @@ function parse(query, hardcoded, macros) {
 
         // TOFIX: `[x]&[y]` is not the same as `[x]<[y]` in complexer cases so maybe we should support it?
         case '&':
-          assert('&');
+          assertAndConsume('&');
           reject('No need to put & between tokens (just omit them), only allowed between match conditions');
           break;
 
@@ -515,7 +662,7 @@ function parse(query, hardcoded, macros) {
       'queryPassState_' + matchStateNumber + ' = queryPassState_'+groupUniqueIndex+'; // ultimate result of group '+groupUniqueIndex+'\n' + // copy back
       '';
 
-    assert(')');
+    assertAndConsume(')');
     return s;
   }
 
@@ -526,16 +673,16 @@ function parse(query, hardcoded, macros) {
     // group inner is caught by parseGroup
     // so this could only be token inner
     // `(A|B)` and `(A&B)` can trigger here (due to macros or constants)
-    consumeWhitesOnly();
+    consumeWhites();
     if (peek('|') || peek('&')) {
       // must wrap once because `A && B || C` is different from `A && (B || C)`
       s = ' && (true' + s + ')';
 
       do {
-        var d = consumeThenSkipWhites();
+        var d = consumeCharThenSkipWhites(); // & or |
         // TOFIX: atom or atoms? affects how the conditions are wrapped... it may be atoms actually.
         s += ' ' + d + d + ' (true' + parseInsideAtom(NOT_INVERSE) + ')';
-        consumeWhitesOnly();
+        consumeWhites();
       } while (peek('|') || peek('&'));
     }
     return s;
@@ -546,7 +693,7 @@ function parse(query, hardcoded, macros) {
     if (pos >= query.length) return true;
 
     if (peek('!')) {
-      assert('!');
+      assertAndConsume('!');
       invert = invert !== INVERSE ? INVERSE : NOT_INVERSE;
     }
     var peeked = peek();
@@ -661,7 +808,7 @@ function parse(query, hardcoded, macros) {
       }
     }
     if (protection <= 0) {debugger; reject('loop protection (literal)'); }
-    assert('`');
+    assertAndConsume('`');
     var ci = peek('i');
     if (ci) ++pos;
 
@@ -696,7 +843,7 @@ function parse(query, hardcoded, macros) {
 
 
   function parseStarCondition(invert) {
-    assert('*');
+    assertAndConsume('*');
 
     return ' && '+(invert?'':'!')+'!token()';
   }
@@ -785,7 +932,7 @@ function parse(query, hardcoded, macros) {
     // forced -> must always return two params, use undefined if a param is not requested
     var assignmentString = '';
     if (peek('=')) {
-      assert('='); // take =, skip whitespace
+      assertAndConsume('='); // take =, skip whitespace
 
       assignmentString += ' /* = */ ';
 
@@ -797,7 +944,7 @@ function parse(query, hardcoded, macros) {
       }
 
       if (peek() === ',') {
-        assert(',');
+        assertAndConsume(',');
         assignmentString += parseAssignmentKey();
         parseColonComment();
       } else if (forced) {
@@ -814,11 +961,11 @@ function parse(query, hardcoded, macros) {
   }
   function parseColonComment() {
     if (peek(':')) {
-      assert(':');
+      assertAndConsume(':');
       var consumed = false;
       var peeked = peek();
       while ((peeked >= 'a' && peeked <= 'z') || (peeked >= 'A' && peeked <= 'Z') || (peeked >= '0' && peeked <= '9') || peeked === '$' || peeked === '_' || peeked === '$' || peeked === '-') {
-        consumeThenSkipWhites();
+        consumeCharThenSkipWhites();
         consumed = true;
         peeked = peek();
       }
@@ -855,7 +1002,7 @@ function parse(query, hardcoded, macros) {
     pos = from;
   }
 
-  function parseQuantifiers(beforeAssignments, afterAssignments, matchStateNumber) {
+  function parseQuantifiers(matchStateNumber) {
     // [foo] 1
     // [foo] 1...
     // [foo] 1..2
@@ -865,104 +1012,60 @@ function parse(query, hardcoded, macros) {
     var max = 0; // 0 => token.length
 
     var peeked = peek();
-    var startpos = pos; // for debugging
-
     if (peeked === '+') {
       min = 1;
-      consumeThenSkipWhites();
+      consumeCharThenSkipWhites();
     } else if (peeked === '?') {
       max = 1;
-      consumeThenSkipWhites();
+      consumeCharThenSkipWhites();
     } else if (peeked === '*') {
       // 0:0 is good.
-      consumeThenSkipWhites();
+      consumeCharThenSkipWhites();
     } else if (peeked === undefined) {
       // EOF
       // TOFIX: we can drop the parseAssignments call here I think?
-      return beforeAssignments + ' /* EOF */ ' + parseAssignments() + afterAssignments;
+      return '';
     } else if (peeked < '0' || peeked > '9') {
       // no quantifier. dont wrap string.
-      return beforeAssignments + ' /* no quantifier */ ' + parseAssignments() + afterAssignments;
+      return '';
     } else {
-      min = parseNumbersAsInt();
-
-      if (!peek('.')) {
-        max = min;
-      } else if (query[pos+1] === '.') {
-        pos += 2;
-
-        if (query[pos] === '.') {
-          consumeThenSkipWhites('.');
-          max = 0;
-        } else {
-          peeked = peek();
-          if (!(peeked > '0' && peeked < '9')) {
-            reject('expecting number after double dot');
-          } else {
-            max = parseNumbersAsInt();
-          }
+      min = consumeNumbersAsInt();
+      consumeWhites();
+      if (peek('.')) {
+        ++pos;
+        if (!(peek('.'))) reject('Single dot after quantifier is illegal');
+        if (!over('.')) {
+          // ..
+          consumeWhites();
+          max = consumeNumbersAsInt();
+        //} else {
+        //  // ...
+        //  // keep max 0 to signify tokens.length
+        //  // (already set so no need to do anything)
         }
-      } else { // only one dot
-        reject('expecting two or three dots after the first optional number in a quantifier');
+      } else {
+        // no upper bound given so repeat exactly `min` times
+        max = min;
       }
     }
 
-    var callbackMode = NORMAL_CALL;
-
-    // quantifier callback modifiers
-    if (peek('@')) {
-      assert('@');
-      // match for each individual (repeated) match
-      callbackMode = REPEAT_CALL;
-    } else if (peek('%')) {
-      assert('%');
-      // pass on start/end tokens for each match in an array
-      // either one array as pairs if only one var assignment
-      // or starts in start and stops in stop parameter if two
-      callbackMode = COLLECT_CALL;
-    }
-
-    var innerCounter = ++counter;
-
-    var result =
-      //'{\n' +
-      '// parseQuantifiers '+matchStateNumber+', loop id = '+uniqueLoopNum+'\n' +
-        '// quantifier for this part of the query: `'+(query.slice(startpos, pos))+'`\n'+
-        'var loopProtection'+uniqueLoopNum+' = 20000;\n' +
-        'var min'+uniqueLoopNum+' = '+min+';\n' +
-        'var max'+uniqueLoopNum+' = '+max+' || tokens.length;\n' +
-        'var count'+uniqueLoopNum+' = 0;\n' +
-        'var startIndex'+uniqueLoopNum+' = index; // backup for backtracking\n' +
-        'do {\n' +
-          beforeAssignments +
-            parseAssignments(FORCE_PARAMFILL) +
-            ', count'+uniqueLoopNum+'+1' +
-            ', ' + callbackMode +
-            ', min'+uniqueLoopNum +
-          afterAssignments +
-        '} while(queryPassState_'+matchStateNumber+' !== FAIL_STATE && --loopProtection'+uniqueLoopNum+' > 0 && (++count'+uniqueLoopNum+' < max'+uniqueLoopNum+'));\n' +
-        'if (loopProtection'+uniqueLoopNum+' <= 0) throw "Loop protection (quantifier)";\n' +
-        'LOG("finished quantifier;", count'+uniqueLoopNum+', ">=", min'+uniqueLoopNum+', "=", count'+uniqueLoopNum+' >= min'+uniqueLoopNum+');\n' +
-        // only check lower bound since upper bound is forced by the loop condition (`s` will override current value of group, but it was true at the start of the loop)
-        'queryPassState_'+matchStateNumber+' = count'+uniqueLoopNum+' >= min'+uniqueLoopNum+' ? PASS_STATE : FAIL_STATE;\n' +
-        // we reset the counter if the required number was not reached OR if it was optional and indeed not matched at all
-        'if (queryPassState_'+matchStateNumber+' === FAIL_STATE || !count'+uniqueLoopNum+') index = startIndex'+uniqueLoopNum+';\n' +
-      //'}\n' +
-      '';
-
-    return result;
+    if (min || max) return min << 16 | max;
+    return 0;
   }
-  function parseNumbersAsInt() {
+  function consumeNumbersAsInt() {
     var s = '';
     var p = query[pos];
     while (p >= '0' && p <= '9') {
       s += p;
       p = query[++pos];
     }
-    --pos;
-    consumeThenSkipWhites();
+    if (s.length) {
+      --pos;
+      consumeCharThenSkipWhites();
 
-    return parseInt(s, 10);
+      return parseInt(s, 10);
+    }
+    reject('Expected to parse some digits, did not find any');
   }
 
   WARN('Parsing query   :', query);

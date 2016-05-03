@@ -5,6 +5,8 @@
 var REPEAT_ONCE = 'once';
 var REPEAT_AFTER = 'after';
 var REPEAT_EVERY = 'every';
+var REPEAT_SPECIAL_CALLBACK_ALL_ONE = 'all one'; // `[X]*%=a` with REPEAT_ONCE
+var REPEAT_SPECIAL_CALLBACK_ALL_TWO = 'all two'; // [X]*%=a,b with REPEAT_ONCE
 var INPUT_COPY = 'copy';
 var INPUT_NO_COPY = 'nocopy';
 
@@ -47,6 +49,85 @@ var tests = module.exports = {
     //  '@',
     //  'make sure single quotes dont accidentally pass the previous test',
     //],
+
+    // callback system
+    [
+      '[`x`][`y`]*=0,1',
+      'xxxyyyy',
+      '@xxyyyy',
+      'no callback by default (the `y` doesnt need to match)'
+    ],
+    [
+      '[`x`][`y`]+=0,1',
+      'xxxyyyy',
+      'xxx@yy$',
+      'no callback by default (0 is overridden so @ is first y)'
+    ],
+    [
+      '[`x`][`y`]*@=0,1',
+      'xxxyyyy',
+      '@xxyyyy',
+      '(y doesnt need to match)',
+    ],
+    [
+      '[`x`][`y`]+@=,1',
+      'xxxyyyy',
+      'xx@$$$$',
+      'call for every `y`, 0 doesnt change, 1 is updated every time',
+    ],
+    [
+      '[`x`][`y`]*%=0',
+      'xxxyyyy',
+      '@xxyyyy',
+      '(y doesnt need to match so just a regular callback)',
+    ],
+    [
+      '[`x`][`y`]+%=0',
+      'xxxyyyy',
+      'xx@$$$$',
+      'call for every `y`, 0 doesnt change, 1 is updated every time',
+      REPEAT_SPECIAL_CALLBACK_ALL_ONE
+    ],
+    [
+      '[`x`][`y`]*%=0,1',
+      'xxxyyyy',
+      'xx@$$$$',
+      'call for every `y`, 0 doesnt change, 1 is updated every time',
+      REPEAT_SPECIAL_CALLBACK_ALL_TWO
+    ],
+    [
+      '[`x`][`y`]*@[`x`][`z`]*@',
+      'xxxxyyxxxzzz',
+      'xxxxyyxxxzzz',
+      'queues 5 callbacks, 2 for `y` and 3 for `z`. Note the extra callback for the entire match',
+    ],
+    [
+      '[`x`][`y`]*@[`x`][`z`]+@',
+      'xxxxyyxxx',
+      'xxxxyyxxx',
+      'queues 2 callbacks, but does not trigger them because there is no `z` and at least one was required',
+    ],
+
+    [
+      '[`x`][`y`]@=0,1',
+      'xxxyyyy',
+      'xx@$yyy',
+      'callback without explicit quantifier',
+    ],
+    [
+      '[`x`][`y`]%=0',
+      'xxxyyyy',
+      'xx@$yyy',
+      'callback without explicit quantifier',
+      REPEAT_SPECIAL_CALLBACK_ALL_ONE
+    ],
+    [
+      '[`x`][`y`]%=0,1',
+      'xxxyyyy',
+      'xx@$$$$',
+      'callback without explicit quantifier',
+      REPEAT_SPECIAL_CALLBACK_ALL_TWO
+    ],
   ],
   js: [
     [
@@ -724,6 +805,9 @@ var tests = module.exports = {
       '@',
       'test param name comment without start'
     ],
+    [
+      '[SPACE]:foo[SPACE]'
+    ]
 
     [
       '[SPACE][SPACE]{NUMBER}',
@@ -1195,43 +1279,43 @@ var tests = module.exports = {
     ],
 
     [
-      '{PLUS} # {MIN}',
+      '{PLUS} @ {MIN}',
       '+ - 1;',
       '@ @ 1;',
       'early call'
     ],
     [
-      '{PLUS} {PLUS} {PLUS} # {MIN} {MIN} {MIN}',
+      '{PLUS} {PLUS} {PLUS} @ {MIN} {MIN} {MIN}',
       '+ + + - - - 1;',
       '@ + + @ - - 1;',
       'early call 2'
     ],
     [
-      '{PLUS} {PLUS} {PLUS} # {`x`} {MIN}=0 {MIN} {MIN}',
+      '{PLUS} {PLUS} {PLUS} @ {`x`} {MIN}=0 {MIN} {MIN}',
       '+ + + x - - - 1;',
       '@ + + x @ - - 1;',
       'early call put x in the middle'
     ],
     [
-      '({PLUS} {PLUS} {PLUS})=0,1 # ({MIN} {MIN} {MIN})=0,1',
+      '({PLUS} {PLUS} {PLUS})@=0,1 ({MIN} {MIN} {MIN})=0,1',
       '+ + + - - - 1;',
       '@ + $ @ - $ 1;',
       'early call grouped'
     ],
     [
-      '({PLUS} {PLUS} {PLUS})=0,1 # ({MIN} {MIN} {MIN})=0,1 # ({PLUS} {PLUS} {PLUS})=0,1',
+      '({PLUS} {PLUS} {PLUS})@=0,1 ({MIN} {MIN} {MIN})@=0,1 ({PLUS} {PLUS} {PLUS})=0,1',
       '+ + + - - - + + + 1;',
       '@ + $ @ - $ @ + $ 1;',
       'multiple early calls'
     ],
     [
-      '({PLUS} {PLUS} {PLUS})=0,1 # ({MIN} {MIN} {MIN})=0,1 # ({PLUS} {PLUS} {PLUS})=0,1 #',
+      '({PLUS} {PLUS} {PLUS})@=0,1 ({MIN} {MIN} {MIN})@=0,1 ({PLUS} {PLUS} {PLUS})@=0,1',
       '+ + + - - - + + + 1;',
       '@ + $ @ - $ @ + $ 1;',
       'final call'
     ],
     [
-      '({PLUS} # {PLUS} # {PLUS})=0,1',
+      '({PLUS} @ {PLUS} @ {PLUS})=0,1',
       '+ + + 1;',
       '@ @ $ 1;',
       'early call in group'
@@ -1240,16 +1324,15 @@ var tests = module.exports = {
 
     [
       '({`x`}{`+`}{`y`}{`+`}?)*@=0,1',
-//    '(({`x`}=1{`+`}{`y`}{`+`}?)=0,1 #)*',
+//    '(({`x`}=1{`+`}{`y`}{`+`}?)@=0,1)*',
       'x + y + x + y',
       '@ + y $ @ + $',
       'base: repeated calls, updating 0 and 1'
     ],
     [
-      '(({`x`}=1{`+`}{`y`}{`+`}?)=0,1 #)*',
+      '(({`x`}=1{`+`}{`y`}{`+`}?)@=0,1)*',
       'x + y + x + y',
       '@ + y $ @ + $',
-      'base: alternative way of writing @'
     ],
     [
       '({`x`}=1{`+`}{`y`}{`+`}?)*@=0,1',
@@ -1439,10 +1522,16 @@ var tests = module.exports = {
     ],
 
     [
-      '[`x`]#[`y`]|[`z`]',
+      '[`x`]@[`y`]|[`z`]',
       'x + z;',
       'x + @;',
-      'checking toplevel OR and backtracking on an early call'
+      'checking toplevel OR and backtracking on an early call (this is `([`x`]@[`y`])|[`z`]`)'
+    ],
+    [
+      '([`x`]@[`y`])|[`z`]',
+      'x + z;',
+      'x + @;',
+      'checking toplevel OR and backtracking on an early call with explicit group'
     ],
 
     [

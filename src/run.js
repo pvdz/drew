@@ -366,11 +366,6 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
     callStack.push(argStack);
     tokensMatched.push(EARLY_CALL); // to detect whether query ended in early call to suppress an implicit call
   }
-  function queueEarlyCall(name) {
-    LOG('queueEarlyCall('+name+')');
-    queueCall(argStack.slice(0));
-    argStack.length = 0;
-  }
 
   return function check(start, handler) {
     index = start;
@@ -401,7 +396,7 @@ function compile(queryCode, tokens, repeatMode, _copiedInput) {
 
       callStack.forEach(function(args) {
         // TOFIX: %
-        var args = flushArgs(args); // may return null
+        args = flushArgs(args); // may return null
         var result = false;
 
         // if the handler returns `true`, the next match should start on the same index regardless
