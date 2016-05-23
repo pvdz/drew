@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>no.</title>
+</head>
+<body>
+  kind of fuzzing, but the first draft of v2. yes. confusing. dont read this, read console.
+  <script src="../src/logging.js"></script>
+  <script src="../src/compile.js"></script>
+  <script>
+    var TRACE = true;
+
+    var everything = {
+      start: [
+        ['group_o', 'quant', 'desig'],
+        ['atom', 'quant', 'desig'],
+        ['atom', 'atom'],
+        ['atom', 'group_o'],
+        ['group_o', 'atom'],
+        ['group_o', 'group_o'],
+        ['atom', '||', 'atom'],
+        ['atom', '||', 'group_o'],
+        ['group_o', '||', 'atom'],
+        ['group_o', '||', 'group_o'],
+      ],
+      group_o: [
+        ['(', 'atom', ')'],
+        ['(', 'atom', '&&', 'atom', ')'],
+        ['(', 'atom', '||', 'atom', ')'],
+        ['(', 'atom', '&&', 'atom', '||', 'atom', ')'],
+        ['(', 'atom', '||', 'atom', '&&', 'atom', ')'],
+        ['(', '(', 'atom', '||', 'atom', ')', '||', 'atom', ')'],
+        ['(', 'atom', '||', '(', 'atom', '||', 'atom', ')', ')'],
+      ],
+      atom: [
+        ['[', 'group_i', ']'],
+        ['{', 'group_i', '}'],
+        ['<'],
+        ['<<'],
+        ['>'],
+        ['>>'],
+        ['~'],
+        ['-->'],
+      ],
+      group_i: [
+        ['cond'], // ok, "no group" :)
+        ['(', 'cond', ')'], // kind of "no group"
+        ['(', 'cond', '&&', 'cond', ')'],
+        ['(', 'cond', '&&', 'cond', ')', '||', 'cond'],
+        ['cond || (', 'cond', '&&', 'cond', ')'],
+        ['(', 'cond', '||', 'cond', ')'],
+        ['(', 'cond', '||', 'cond', ')', '&&', 'cond'],
+        ['cond', '&&', '(', 'cond', '||', 'cond', ')'],
+      ],
+      cond: [
+        ['macro'],
+        ['*'],
+        ['`x`'],
+        ['`x1`'],
+        ['`x`i'],
+        ['/x/'],
+        ['/x/i'],
+        ['/x/m'],
+        ['/x/im'],
+        ['/x/mi'],
+      ],
+      match: [
+        ['cond'],
+        ['cond', '||', 'cond'],
+        ['cond', '&&', 'cond'],
+        ['(', 'cond', '&&', 'cond', ')', '||', 'cond'],
+        ['(', 'cond', '||', 'cond', ')', '&&', 'cond'],
+      ],
+      quant: [
+        [''],
+        ['*'],
+        ['?'],
+        ['+'],
+        ['1'],
+        ['348'],
+        ['3', '...'],
+        ['755', '...'],
+        ['...', '1'],
+        ['...', '407'],
+        ['8', '..', '9'],
+        ['487', '..', '2218'],
+      ],
+      desig: [
+        [''],
+        ['=', '0'],
+        ['=', 'aaa'],
+        ['=', '045fch'],
+        ['=', 'Agfgd'],
+        ['=', '$gfgd'],
+        ['=', 'g$fgd'],
+        ['=', '_gfgd'],
+        ['=', 'g_fgd'],
+        ['=', ',', '15'],
+        ['=', ',', 'dfcx'],
+        ['=', 'fcxa', ',', 'gfcxv'],
+        ['=', '54', ',', 'grdaAb'],
+        ['=', 'evDDxa', ',', '7448'],
+        ['=', '477', ',', '8733'],
+      ],
+    };
+
+    let whites = [
+      '',
+      ' ',
+      ':', // dont put adjacent to other colon or it may end up as ::
+      '\t',
+      '\n',
+      '\r',
+      ': simple comment HERE',
+      ': simple comment terminated HERE;',
+      ':: line : comment :: HERE ::: endlinecomment!\n',
+      '::: multi : line ::\n comment HERE :::',
+    ];
+
+    var prot = 100;
+    var list = [];
+    function find(arr) {
+      for (var i=0; i<arr.length; ++i) {
+        if (everything[arr[i]]) {
+          return i;
+        }
+      }
+      return -1;
+    }
+    function extrapolate(arr, _d, _debug) {
+      if (TRACE) _debug = [].concat(_debug || [], [arr.slice(0)]);
+      if (--prot < 0) throw 'stop.';
+      var index = find(arr);
+      if (index >= 0) {
+        _extrapolate(arr, index, _d, _debug);
+      } else {
+        finalize(arr, _debug);
+      }
+    }
+
+    function _extrapolate(arr, index, _d, _debug) {
+      var key = arr[index];
+      var reps = everything[key].filter(_ => Math.random() < .25);
+      for (var j=0; j<reps.length; ++j) {
+        var copy = arr.slice(0);
+        var args = [index, 1].concat(reps[j]);
+        copy.splice.apply(copy, args);
+        extrapolate(copy, _d+1, _debug);
+      }
+    }
+
+    function zipFrom(tokens, whites, into, from1, from2, len, offset, _debug) {
+      for (var i = 0; i<len; ++i) {
+        var w = whites[(offset + from2 + i) % whites.length];
+        var t = tokens[from1 + i];
+
+        if (TRACE) _debug.push(`zipFrom[${i}]: w: "${w}" t: "${t}"}`);
+
+        var prev = into.length && into[into.length - 1] || '';
+        if (prev[0] === ':' && prev === ':' || prev[1] !== ':') {
+          if (/^\s*[a-zA-z0-9]/.test(t)) {
+            // skip this because it may lead to something like `['[', ':', 'foo', ']']` which is `[:foo]` which is invalid
+            return false;
+          }
+        } else if (prev === ':' && t[0] === ':') {
+          return false;
+        }
+
+        into.push(w, t);
+      }
+    }
+
+    function finalize(arr, _debug) {
+      if (TRACE) {
+        _debug.push(arr.join(''));
+        _debug.push('"' + arr.join('", "') + '"');
+      }
+      one(arr, arr, _debug);
+
+      for (var i=0; i<whites.length; ++i) {
+        whiten(arr, i, _debug);
+      }
+    }
+
+    function whiten(arr, whiteOffset, _debug) {
+      arr.push(''); // hack. allows us to "easily" inject whitespace tokens as the last, we'll pop this afterwards
+
+      var len1 = arr.length;
+      var len2 = whites.length;
+
+      // len of start. at most as many as there are white tokens to inject (len2), or less if the input has fewer tokens
+      var first = Math.min(len1, len2);
+      // the middle is whatever remains after putting white tokens at the start and end. so total length minus 2x len2
+      var middle = Math.max(len1 - 2 * len2, 0);
+      // if there are more than len2 tokens, also inject white tokens on the right side
+      var last = len1 > len2 ? Math.min(len1 - len2, len2) : 0;
+
+      if (TRACE) _debug.push('firstmiddlelast: ' + [first, middle, last]);
+      var out = [];
+      if (zipFrom(arr, whites, out, 0, 0, first, whiteOffset, _debug) === false) return;
+      for (var i=0; i<middle; ++i) out.push(arr[first + i]);
+      if (last && zipFrom(arr, whites, out, first + middle, 0, last, whiteOffset, _debug) === false) return;
+
+      arr.pop(); // pop the temp token. this way the last injected white token is at the end.
+      out.pop(); // from this one too ;)
+
+      if (TRACE) {
+        _debug.push(out.join(''));
+        _debug.push('"' + out.join('", "') + '"');
+      }
+      one(arr, out, TRACE && [].concat(_debug, [out.slice(0)]));
+    }
+
+    var count = 0;
+    function one(arr, out, _debug) {
+      ++count;
+//      console.log("%o %o", arr, arr.join(''));
+//      console.log(out);
+      console.log(out.join(''));
+      console.log(out);
+      try {
+        var t = compileDrew(out.join(''));
+      } catch(e) {
+        if (TRACE) console.warn(_debug);
+        throw new Error(e);
+      }
+    }
+
+    extrapolate(['start'], 0);
+    console.log('count:', count);
+
+//    console.log(list.join('\n'));
+//    console.log(10000-prot)
+
+  </script>
+</body>
+</html>

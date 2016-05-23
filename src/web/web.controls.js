@@ -1,4 +1,4 @@
-var CONFIG = {
+var CONTROLS = {
   _query: document.querySelector('#query'),
   _input: document.querySelector('#input'),
   _callback: document.querySelector('#callback'),
@@ -13,7 +13,7 @@ var CONFIG = {
     txt: {
       e: document.querySelector('#txt'),
       desc: 'Considers each character a token',
-      value: 'text',
+      value: 'txt',
     },
     js: {
       e: document.querySelector('#js'),
@@ -64,29 +64,34 @@ var CONFIG = {
   verbose: {
     _e: document.querySelector('.verbose'),
     _desc: document.querySelector('.verbose .desc'),
-    _default: 'limited',
-    verbose: {
-      e: document.querySelector('#verbose'),
-      desc: 'Show all debugging output',
-      value: Infinity,
-    },
-    limited: {
-      e: document.querySelector('#limited'),
-      desc: 'Limit debugging output to 5000 lines',
-      value: 5000,
-    },
-    silent: {
-      e: document.querySelector('#silent'),
-      desc: 'Hide debugging output',
+    _default: 'verbose-med',
+    'verbose-off': {
+      e: document.querySelector('#verbose-off'),
+      desc: 'Squash logging output',
       value: 0,
+    },
+    'verbose-lo': {
+      e: document.querySelector('#verbose-lo'),
+      desc: 'Only show LOW() volume logging calls, no groups',
+      value: 1,
+    },
+    'verbose-med': {
+      e: document.querySelector('#verbose-med'),
+      desc: 'Show LOW() and MED() volume logging calls, no groups',
+      value: 2,
+    },
+    'verbose-hi': {
+      e: document.querySelector('#verbose-hi'),
+      desc: 'Show all logging calls and groups',
+      value: 3,
     },
   },
 };
 
 function setopConfigurator(state) {
-  for (var choiceClassName in CONFIG) {
+  for (var choiceClassName in CONTROLS) {
     if (choiceClassName[0] !== '_') {
-      setupChoices(choiceClassName, CONFIG[choiceClassName]);
+      setupChoices(choiceClassName, CONTROLS[choiceClassName]);
     }
   }
 
