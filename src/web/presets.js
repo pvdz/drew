@@ -110,5 +110,19 @@ var PRESETS = {
     "input": ".foo { \n  width: 15px; \n  height: 200%; \n}",
     "macros": "({\n  IS_BLACK: '!WHITE', // see constants\n})\n            ",
     "constants": "({\n  WHITE: 'current().type === Constants.TOKEN_WHITESPACE',\n  IS_NEWLINE: 'current().type === Constants.TOKEN_NEWLINE',\n})\n            "
+  },
+  "For Mathias": {
+    "name": "For Mathias",
+    "lang": "js",
+    "repeatMode": "after",
+    "curryTokens": "curry-no",
+    "tokenMode": "object",
+    "verboseMode": "verbose-med",
+    "query": "{IS_STRING}",
+    "args": "stringToken",
+    "callback": "// this would be setup\nif (!window.strings) window.strings = [];\n\nvar pos = strings.indexOf(stringToken.value);\nif (pos < 0) {\n  pos = strings.length;\n  strings.push(stringToken.value);\n}\n\nstringToken.value = 'strings['+pos+']';\n\n// cleanup in a simple post processor function",
+    "input": "var s = ['long string', 'long string', 'more string', 'long string'];\n",
+    "macros": "({\n  IS_NEWLINE: 'LF | CR | CRLF | PS | LS',\n  LF: '`\\\\x0A`', // \\n\n  CR: '`\\\\x0D`', // \\r\n  CRLF: '`\\\\x0A\\\\x0D`',\n  PS: '`\\\\u2028`',\n  LS: '`\\\\u2029`',\n})\n            ",
+    "constants": "({\n  IS_BLACK: 'current().type !== Par.WHITE',\n  // note: doesn't dedupe single from double strings but meh.\n  IS_STRING: 'current().type === Par.STRING',\n})\n            "
   }
 };
