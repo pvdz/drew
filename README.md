@@ -91,6 +91,10 @@ The repo contains example scripts for two languages and one for plain text. They
 
 [src/drew_txt.js](src/drew_txt.js) contains `drewTxt` which you can call as `drewTxt(txtCode, query, callback, options)`. 
 
+# NPM
+
+There's a build on npm. You should be able to get it through `npm install drew`. When you `require('drew')` you should get access to the compiler, the runtime, and the logging tools. The language presets describe above are not on npm, you can get them from github.
+
 # Queries
 
 Drew queries look a bit like regular expressions. But since the goal of Drew is to work on tokens, tokens are explicitly delimited by either `[]` for "white tokens" or `{}` for "black tokens". Black tokens automatically skip tokens that do not match the macro `IS_BLACK`, which you must define yourself. Conceptually this macro will want to skip whitespace, newlines, and comments. Drew doesn't really care about the actual value of the macro, though, so if you want to use it to skip all tokens with the word "sheep" you are free to do so.
