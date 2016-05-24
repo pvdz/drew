@@ -9,7 +9,6 @@ var CssConstants = require('../lib/ccssparser/constants');
  * @param {string} query
  * @param {Function} callback
  * @param {Object} [options={}] See also the options for drew()
- * @property {boolean} options.curryTokens Should the callback always received the array of tokens as first param?
  * @property {Object} [macros={}] Additional macros, will set IS_BLACK and IS_NEWLINE on this only if not already set
  * @property {Object} [constants={}] Additional constants, will set IS_BLACK and IS_NEWLINE on this only if not already set
  * @returns {Object[]} The tokens
@@ -31,7 +30,6 @@ function drewCss(input, query, callback, options) {
 
   CssParser.parse(input);
   var tokens= CssParser.getAllTokens();
-  if (options.curryTokens) callback = callback.bind(undefined, tokens);
   drew(tokens, query, macros, constants, callback, options);
 
   return tokens;

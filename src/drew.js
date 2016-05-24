@@ -13,12 +13,18 @@
    * @param {Function} callback
    * @param {Object} options
    * @property {string} [options.repeatMode='once'] once, after, every. Continue after a match? last start + 1 or at prev match end + 1?
-   * @property {string} [options.returnMode='token'] token, index. Pass tokens or their (white) index to callbacks?
+   * @property {string} [options.tokenMode='token'] object, index. Pass tokens or their (white) index to callbacks?
+   * @property {string} options.curryTokens yes, no. Should the callback always received the array of tokens as first param?
    * @property {number} [options.verboseMode=0] 0=none, 1=hi, 2=med, 3=low
    */
   function drew(tokens, query, macros, constants, callback, options) {
     if (!options) options = {};
-    else logging.setMode(options.verboseMode);
+    else {
+      logging.setMode(options.verboseMode);
+      if (options.curryTokens === 'yes') {
+        callback = callback.bind(undefined, tokens);
+      }
+    }
 
     if (!macros.IS_BLACK && !constants.IS_BLACK) throw new Error('Must always declare a macro or constant for IS_BLACK');
     if (!macros.IS_NEWLINE && !constants.IS_NEWLINE) throw new Error('Must always declare a macro or constant for IS_NEWLINE');
@@ -27,7 +33,8 @@
     var func = compileDrew(funcCode, true, true);
 
     var repeatMode = options.repeatMode || 'once';
-    var returnIndexOnly = options.returnMode === 'index';
+    var returnIndexOnly = options.tokenMode === 'index';
+
 
     runDrew(func, tokens, macros, constants, callback, repeatMode, returnIndexOnly);
   }

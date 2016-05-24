@@ -40,7 +40,8 @@ function go() {
 
   var lang = CONTROLS.lang[document.querySelector('.lang .state-button.active').id].value;
   var repeatMode = CONTROLS.repeat[document.querySelector('.repeat .state-button.active').id].value;
-  var copyInputMode = CONTROLS.copy[document.querySelector('.copy .state-button.active').id].value;
+  var curryTokens = CONTROLS.curryTokens[document.querySelector('.curry_tokens .state-button.active').id].value;
+  var tokenMode = CONTROLS.tokenMode[document.querySelector('.token_mode .state-button.active').id].value;
   var verboseMode = CONTROLS.verbose[document.querySelector('.verbose .state-button.active').id].value;
 
   logging.setMode(verboseMode);
@@ -82,7 +83,7 @@ function go() {
   document.querySelector('#compiled').value = funcCode;
   LOG(funcCode);
 
-  Drew.drew(tokens, queryString, macros, constants, callback, {repeatMode: repeatMode, copyInputMode: copyInputMode});
+  Drew.drew(tokens, queryString, macros, constants, callback, {repeatMode: repeatMode, tokenMode: tokenMode, curryTokens: curryTokens});
 
   CONTROLS._output.value = tokens.map(function (t) {
     return t.value;
@@ -107,8 +108,9 @@ function loadPreset() {
 
   CONTROLS.lang[preset.lang].e.onclick();
   CONTROLS.repeat[preset.repeatMode].e.onclick();
-  CONTROLS.copy[preset.copyInputMode === 'copy' ? 'yescopy' : preset.copyInputMode].e.onclick();
   CONTROLS.verbose[preset.verboseMode].e.onclick();
+  CONTROLS.curryTokens[preset.curryTokens].e.onclick();
+  CONTROLS.tokenMode[preset.tokenMode].e.onclick();
 }
 
 function savePreset() {
@@ -122,7 +124,8 @@ function savePreset() {
 
   var lang = document.querySelector('.lang .state-button.active').id;
   var repeatMode = document.querySelector('.repeat .state-button.active').id;
-  var copyInputMode = document.querySelector('.copy .state-button.active').id;
+  var curryTokens = document.querySelector('.curry_tokens .state-button.active').id;
+  var tokenMode = document.querySelector('.token_mode .state-button.active').id;
   var verboseMode = document.querySelector('.verbose .state-button.active').id;
 
   var presets = JSON.parse(localStorage.getItem('drew-presets') || 'null') || PRESETS;
@@ -130,7 +133,8 @@ function savePreset() {
     name: name,
     lang: lang,
     repeatMode: repeatMode,
-    copyInputMode: copyInputMode,
+    curryTokens: curryTokens,
+    tokenMode: tokenMode,
     verboseMode: verboseMode,
     query: query,
     args: args,

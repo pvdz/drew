@@ -46,19 +46,34 @@ var CONTROLS = {
       value: 'every',
     },
   },
-  copy: {
-    _e: document.querySelector('.copy'),
-    _desc: document.querySelector('.copy .desc'),
-    _default: 'yescopy',
-    yescopy: {
-      e: document.querySelector('#yescopy'),
-      desc: 'Read original input from a backup property so you can safely update <code>.value</code>',
-      value: 'copy',
+  curryTokens: {
+    _e: document.querySelector('.curry_tokens'),
+    _desc: document.querySelector('.curry_tokens .desc'),
+    _default: 'curry-no',
+    'curry-yes': {
+      e: document.querySelector('#curry-yes'),
+      desc: 'Pass on the list of all tokens before all other parameters of callback, moves the rest',
+      value: 'yes',
     },
-    nocopy: {
-      e: document.querySelector('#nocopy'),
-      desc: 'Use <code>.value</code> as is, even if you updated it previously',
-      value: 'nocopy',
+    'curry-no': {
+      e: document.querySelector('#curry-no'),
+      desc: 'Do not pass on list of all tokens to callback',
+      value: 'no',
+    },
+  },
+  tokenMode: {
+    _e: document.querySelector('.token_mode'),
+    _desc: document.querySelector('.token_mode .desc'),
+    _default: 'index',
+    index: {
+      e: document.querySelector('#index'),
+      desc: 'Callback receives the (white) index numbers of token results',
+      value: 'index',
+    },
+    object: {
+      e: document.querySelector('#object'),
+      desc: 'Callback receives the token objects of matches at (white) index',
+      value: 'object',
     },
   },
   verbose: {

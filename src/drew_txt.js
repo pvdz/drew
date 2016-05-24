@@ -15,7 +15,6 @@ function drewTxt(input, query, callback, options) {
   }
 
   var tokens = splitter(input);
-  if (options.curryTokens) callback = callback.bind(undefined, tokens);
   drew(tokens, query, macros, constants, callback, options);
 
   return tokens;
