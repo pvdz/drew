@@ -4,7 +4,7 @@ var PRESETS = {
     "lang": "js",
     "repeatMode": "after",
     "curryTokens": "curry-no",
-    "tokenMode": "index",
+    "tokenMode": "object",
     "verboseMode": "verbose-med",
     "query": "{`if` | `while`}       :: find a token whose entire value is `if` or `while`\n  {PAREN_PAIR}=,0      :: skip the parens and pass the closing paren as first param to callback\n  (~ [IS_NEWLINE])=2,3 :: skip tokens until the next newline\n  {`{`}=,1             :: pass on the open curly bracket\n\n            ",
     "args": "parenStop, curlyOpen, whiteStart, whiteStop",
