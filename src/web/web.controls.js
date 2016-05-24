@@ -64,7 +64,7 @@ var CONTROLS = {
   tokenMode: {
     _e: document.querySelector('.token_mode'),
     _desc: document.querySelector('.token_mode .desc'),
-    _default: 'index',
+    _default: 'object',
     index: {
       e: document.querySelector('#index'),
       desc: 'Callback receives the (white) index numbers of token results',
