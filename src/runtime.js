@@ -3,6 +3,7 @@
 (function(exports){
   var compileDrew = typeof Drew === 'object' ? Drew.compileDrew : require('./compile').compileDrew;
   var logging = typeof Drew === 'object' ? Drew.logging : require('./logging').logging;
+
   var LOG = logging.LOG;
   var DESC = logging.DESC;
   var WARN = logging.WARN;
@@ -10,6 +11,8 @@
   var HI = logging.HI;
   var GROPEN = logging.GROPEN;
   var GRCLOSE = logging.GRCLOSE;
+
+  // BODY-START
 
   function runDrew(func, tokens, macros, constants, callback, repeatMode, returnIndexOnly) {
     var pointer = 0;
@@ -680,6 +683,8 @@
       return b;
     }
   }
+
+  // BODY-STOP
 
   exports.runDrew = runDrew;
 })(typeof module === 'object' ? module.exports : window.Drew);

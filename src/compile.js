@@ -12,6 +12,9 @@
   var GROPEN = logging.GROPEN;
   var GRCLOSE = logging.GRCLOSE;
 
+
+  // BODY-START
+
   var input = '';
   var pos = 0;
   var len = 0;
@@ -755,6 +758,8 @@
       reject('UNKNOWN_OUTER_TYPE');
       return '';
     }
+
+  // BODY-STOP
 
   exports.compileDrew = compileDrew;
 })(typeof module === 'object' ? module.exports : window.Drew);

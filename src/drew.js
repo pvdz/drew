@@ -3,6 +3,8 @@
   var compileDrew = typeof Drew === 'object' ? Drew.compileDrew : require('./compile').compileDrew;
   var runDrew = typeof Drew === 'object' ? Drew.runDrew : require('./runtime').runDrew;
 
+  // BODY-START
+
   /**
    * @param {Array.<{value:string}>} tokens Each token should at least have a .value property containing the string value
    * @param {string} query
@@ -29,6 +31,8 @@
 
     runDrew(func, tokens, macros, constants, callback, repeatMode, returnIndexOnly);
   }
+
+  // BODY-STOP
 
   exports.drew = drew;
 })(typeof module === 'object' ? module.exports : window.Drew);
