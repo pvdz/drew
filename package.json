@@ -1,6 +1,6 @@
 {
   "name": "drew",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "dist/drew-dist.js",
   "description": "Apply a query to a language cut up in chunks, or tokens, so you can find certain structures with ease and analyze or rewrite them.",
   "repository": {
@@ -8,9 +8,9 @@
     "url": "git://github.com/qfox/drew.git"
   },  "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "bin/concat.sh",
+    "build": "bin/build.sh",
     "// prepublish is bullshit because it shouldn't run at install time but where's the logic in that, right": "EPIC FAIL",
-    "prepublish": "bin/concat.sh"
+    "prepublish": "bin/build.sh"
   },
   "author": "Peter van der Zee (http://qfox.nl/)",
   "license": "ISC"

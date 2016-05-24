@@ -8,6 +8,22 @@ The goal of this library is to make it easy to manipulate, investigate, and rewr
 
 You have input, pre-processed by a lexer of your choice, and a query and apply this query to the input. A callback is called whenever a match is found.
 
+# Language presets
+
+The repo contains example scripts for two languages and one for plain text. They will all parse your input in the designated language and supply the required built-in macros and constants for `IS_BLACK` and `IS_NEWLINE`. You can override them, though, through the `options` parameter, if you'd want to.
+
+[src/drew_js.js](src/drew_js.js) contains `drewJs` which you can call as `drewJs(jsCode, query, callback, options)`.
+
+[src/drew_css.js](src/drew_css.js) contains `drewCss` which you can call as `drewCss(cssCode, query, callback, options)`.
+
+[src/drew_txt.js](src/drew_txt.js) contains `drewTxt` which you can call as `drewTxt(txtCode, query, callback, options)`.
+
+# NPM
+
+There's a build on npm. You should be able to get it through `npm install drew`. When you `require('drew')` you should get access to the compiler, the runtime, and the logging tools. The language presets describe above are not on npm, you can get them from github.
+
+There is an example on npm that will be put in the `dist` dir as well.
+
 # Introduction
 
 To put Drew to work you call the main exported function `drew`. It looks like this:
@@ -18,7 +34,7 @@ drew(tokens, query, macros, constants, callback, options);
 
 After calling this function Drew will apply the query to the tokens and call your callback whenever there is a match. The options can tell Drew what to do after a match was found and processed, like continue or stop.
 
-Simple example:
+Simple example (also found in `src/example.js`):
 
 ```
 var input = 'hello, world!';
@@ -80,20 +96,6 @@ Drew doesn't return anything itself, instead you should manipulate the tokens di
 ```
 tokens.map(function (t) { return t.value; }).join('')
 ```
-
-# Language presets
-
-The repo contains example scripts for two languages and one for plain text. They will all parse your input in the designated language and supply the required built-in macros and constants for `IS_BLACK` and `IS_NEWLINE`. You can override them, though, through the `options` parameter, if you'd want to. 
- 
-[src/drew_js.js](src/drew_js.js) contains `drewJs` which you can call as `drewJs(jsCode, query, callback, options)`. 
-
-[src/drew_css.js](src/drew_css.js) contains `drewCss` which you can call as `drewCss(cssCode, query, callback, options)`. 
-
-[src/drew_txt.js](src/drew_txt.js) contains `drewTxt` which you can call as `drewTxt(txtCode, query, callback, options)`. 
-
-# NPM
-
-There's a build on npm. You should be able to get it through `npm install drew`. When you `require('drew')` you should get access to the compiler, the runtime, and the logging tools. The language presets describe above are not on npm, you can get them from github.
 
 # Queries
 

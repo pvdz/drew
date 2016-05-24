@@ -68,3 +68,7 @@ if (typeof module === 'object') module.exports = Drew;
 " > dist/drew-dist.js
 
 echo "Written concatted build to `pwd`/dist/drew-dist.js"
+
+cp src/example.js dist/example.js
+
+echo "Copied example to `pwd`/dist/drew-example.js"
