@@ -370,7 +370,9 @@
           dstop = parseIdentifier();
         } else {
           dstart = parseIdentifier();
+          parseWhitesMaybe();
           if (skipIf(',')) {
+            parseWhitesMaybe();
             dstop = parseIdentifier();
           }
         }

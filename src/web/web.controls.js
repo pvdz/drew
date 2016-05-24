@@ -17,7 +17,7 @@ var CONTROLS = {
     },
     js: {
       e: document.querySelector('#js'),
-      desc: 'Uses <a href="https://github.com/qfox/zeparser2">ZeParser2</a> to create a token stream',
+      desc: 'Uses <a href="https://github.com/qfox/zeparser2">ZeParser2</a> to create a token stream for ES5 JS code',
       value: 'js',
     },
     css: {

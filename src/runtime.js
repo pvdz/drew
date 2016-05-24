@@ -39,10 +39,6 @@
           paramStack.length = 0;
         }
         if (start < count) {
-          // if there was no designator in the part of the query that matched, assign the start to 0
-          // TOFIX: this may screw up callbacks where the query has designators but those parts are not matched... (otoh that could be considered a bug)
-          if (!paramStack.length) paramStack.push('0', start);
-
           foundMatch(start);
 
           switch (repeatMode) {
@@ -72,6 +68,13 @@
       HI('- rinse match from '+start+' to '+pointer);
       LOG('-- unwinding param stack:', paramStack);
       var params = {};
+      if (!paramStack.length) {
+        paramStack.push(
+          0, start,
+          1, Math.max(start, pointer-1)
+        );
+      }
+
       var max = 0;
       for (var i = 0; i < paramStack.length; i += 2) {
         var key = paramStack[i];
@@ -79,11 +82,11 @@
         params[key] = returnIndexOnly ? tokenIndex : tokens[tokenIndex];
         if (key > max) max = parseInt(key, 10);
       }
+
       var keys = Object.keys(params);
       var objMode = (keys.some(function (key) {
         return String(parseInt(key, 10)) !== key;
       }));
-
 
       if (objMode) {
         HI('-- params passed on to callback:', params);
