@@ -1,6 +1,6 @@
 {
   "name": "drew",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "dist/drew-dist.js",
   "description": "Apply a query to a language cut up in chunks, or tokens, so you can find certain structures with ease and analyze or rewrite them.",
   "repository": {
